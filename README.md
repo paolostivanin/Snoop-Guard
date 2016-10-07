@@ -1,2 +1,2 @@
 # WebMonit
-Receive a notification when your webcam is being used
+Receive a notification every time your webcam is turned on
