@@ -96,6 +96,8 @@ int open_device(const char *dev_name) {
 int main(int argc, char **argv) {
     // TODO : list dev instead of using fixed name
     // TODO: daemonize me
+    // TODO: specify interval, default is X
+    // TODO: add ability to skip some apps (skype, etc) ??
     const char *dev_name = "/dev/video0";
 
     int fd = open_device(dev_name);

@@ -6,3 +6,5 @@ To Do list:
 * :on: use all video dev and not only one  
 * :soon: running as a daemon
 * :soon: send a notification
+* :soon: specify check interval (in seconds or minutes)
+* :soon: user can temporarly disable notification (like hen using Skype or similar softwares)
