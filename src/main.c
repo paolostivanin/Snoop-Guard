@@ -33,7 +33,7 @@ int is_dev_being_used(int fd, const char *dev_name) {
     req.memory = V4L2_MEMORY_MMAP;
 
     if (xioctl(fd, VIDIOC_REQBUFS, &req) == -1) {
-        if (EINVAL == errno) {
+        if (errno == EINVAL) {
             fprintf(stderr, "%s does not support memory mapping\n", dev_name);
             return GENERIC_ERROR;
         } else {
@@ -51,7 +51,7 @@ static void init_device(int fd, const char *dev_name) {
     struct v4l2_capability cap;
 
     if (xioctl(fd, VIDIOC_QUERYCAP, &cap) == -1) {
-        if (EINVAL == errno) {
+        if (errno == EINVAL) {
             fprintf(stderr, "%s is no V4L2 device\n", dev_name);
             exit(EXIT_FAILURE);
         } else {
