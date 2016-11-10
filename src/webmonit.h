@@ -1,5 +1,10 @@
 #pragma once
 
+#define SW_NAME "WebMonit"
+#define SW_VERSION "1.0-alpha"
+#define DEV_NAME "Paolo Stivanin"
+#define DEV_EMAIL "info@paolostivanin.com"
+
 extern struct _devs {
     char *dev_name;
     struct _devs *next;

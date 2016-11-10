@@ -21,10 +21,15 @@
 
 int server_mode (void)
 {
-    // TODO: libevent + socket
-    // TODO: use logfile instead of printf
-    // TODO: specify interval, default is X
-    // TODO: add ability to skip some apps (skype, etc) ??
+    /* TODO:
+        - get interval and ignored app from file
+        - list_webcams
+        - check whether webcams are in use
+        - send notification
+        - log somewhere
+        - sleep default or as specified by interval
+        - repeat
+    */
     struct _devs *head, *tmp;
     int fd;
 

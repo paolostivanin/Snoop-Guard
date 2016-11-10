@@ -15,5 +15,9 @@
 
 int client_mode ()
 {
+    /* TODO
+        - show current values taken from config file
+        - set new values
+    */
     return 0;
 }
