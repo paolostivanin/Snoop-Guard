@@ -6,12 +6,12 @@
 #include "webmonit.h"
 
 
-struct _devs *list_webcam (void)
+struct _devs *list_webcam ()
 {
     struct _devs *head, *curr;
     const char *common = "/dev/video";
-    int fd;
 
+    int fd;
     head = NULL;
 
     // Getting the first 32 webcam should be more than enough :) If not, please adjust the number to suits your needs.

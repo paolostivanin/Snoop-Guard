@@ -6,11 +6,6 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <event.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
 #include <linux/videodev2.h>
 #include "webmonit.h"
 
@@ -23,43 +18,33 @@ int server_mode (void)
 {
     /* TODO:
         - get interval and ignored app from file
+        - list and get active mics
         - list_webcams
+        - thread for the two checks? Don't think it's worth the effort
         - check whether webcams are in use
         - send notification
         - log somewhere
         - sleep default or as specified by interval
         - repeat
     */
-    struct _devs *head, *tmp;
+    struct _devs *head_webcam, *tmp_webcam, *head_mic, *tmp_mic;
     int fd;
 
-    head = list_webcam ();
+    head_webcam = list_webcam ();
 
-    while (head) {
-        fd = open_device (head->dev_name);
-        init_device (fd, head->dev_name);
+    while (head_webcam) {
+        fd = open_device (head_webcam->dev_name);
+        init_device (fd, head_webcam->dev_name);
 
         if (fd >= 0)
             close (fd);
 
-        tmp = head;
-        head = head->next;
-        free (tmp);
+        tmp_webcam = head_webcam;
+        head_webcam = head_webcam->next;
+        free (tmp_webcam);
     }
 
-    return 0;
-}
-
-
-int set_nonblock (int fd)
-{
-    int flags = fcntl (fd, F_GETFL);
-    if (flags < 0)
-        return flags;
-
-    flags |= O_NONBLOCK;
-    if (fcntl (fd, F_SETFL, flags) < 0)
-        return -1;
+    // TODO mic use sysdefault name or read from config file
 
     return 0;
 }

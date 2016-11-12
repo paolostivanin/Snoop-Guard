@@ -5,6 +5,9 @@
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 
+#define WEBCAM 10
+#define MIC 15
+
 extern struct _devs {
     char *dev_name;
     struct _devs *next;
