@@ -5,8 +5,6 @@
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 
-#define WEBCAM 10
-#define MIC 15
 
 extern struct _devs {
     char *dev_name;
@@ -16,6 +14,8 @@ extern struct _devs {
 struct _devs *list_webcam (void);
 
 int get_webcam_status (int fd, const char *dev_name);
+
+int get_mic_status (const char *mic);
 
 int xioctl (int fh, unsigned long request, void *arg);
 

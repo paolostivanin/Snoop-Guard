@@ -7,11 +7,14 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
+#include <alsa/asoundlib.h>
 #include "webmonit.h"
 
 #define GENERIC_ERROR -1
-#define WEBCAM_NOT_IN_USE 0
-#define WEBCAM_ALREADY_IN_USE 1
+#define WEBCAM_NOT_IN_USE 10
+#define WEBCAM_ALREADY_IN_USE 11
+#define MIC_NOT_IN_USE 20
+#define MIC_ALREADY_IN_USE 21
 
 
 int server_mode (void)
@@ -45,6 +48,7 @@ int server_mode (void)
     }
 
     // TODO mic use sysdefault name or read from config file
+    get_mic_status ("sysdefault");
 
     return 0;
 }
@@ -131,5 +135,19 @@ int get_webcam_status (int fd, const char *dev_name)
     } else {
         fprintf (stdout, "Webcam is not being used\n");
         return WEBCAM_NOT_IN_USE;
+    }
+}
+
+
+int get_mic_status (const char *mic)
+{
+    snd_pcm_t *capture_handle = NULL;
+
+    if (snd_pcm_open (&capture_handle, mic, SND_PCM_STREAM_CAPTURE, 0) < 0) {
+        return MIC_ALREADY_IN_USE;
+    }
+    else {
+        snd_pcm_close (capture_handle);
+        return MIC_NOT_IN_USE;
     }
 }
