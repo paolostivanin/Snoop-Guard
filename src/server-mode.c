@@ -21,14 +21,11 @@ int server_mode (void)
 {
     /* TODO:
         - get interval and ignored app from file
-        - list and get active mics
-        - list_webcams
-        - thread for the two checks? Don't think it's worth the effort
-        - check whether webcams are in use
+        - check whether webcam are being used
+        - check whether mic is being used
         - send notification
         - log somewhere
         - sleep default or as specified by interval
-        - repeat
     */
     struct _devs *head_webcam, *tmp_webcam, *head_mic, *tmp_mic;
     int fd;
