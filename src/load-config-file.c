@@ -8,10 +8,12 @@ load_config_file ()
 {
     GError *err = NULL;
     ConfigValues *config_values = g_new0 (ConfigValues, 1);
+    config_values->ignore_apps = NULL;
 
     GKeyFile *conf_file = g_key_file_new ();
 
-    if (!g_key_file_load_from_file (conf_file, "PATH", G_KEY_FILE_NONE, &err)) { // TODO think about a path
+    // TODO think about a path
+    if (!g_key_file_load_from_file (conf_file, "PATH", G_KEY_FILE_NONE, &err)) {
         g_printerr ("%s\nUsing default values.\n", err->message);
         set_default_values (DEFAULT_CHECK_INTERVAL, DEFAULT_NOTIFICATION_TIMEOUT, DEFAULT_MIC_NAME, config_values);
         g_clear_error (&err);
@@ -45,18 +47,26 @@ load_config_file ()
             set_default_values (-1, -1, DEFAULT_MIC_NAME, config_values);
         }
 
+        // if no values are there, then ignore_apps[0] = NULL
         config_values->ignore_apps = g_key_file_get_string_list (conf_file, "server", "ignore_apps", NULL, &err);
         if (err != NULL) {
             g_printerr ("%s\nUsing default value.\n", err->message);
             g_clear_error (&err);
-            // default value is NULL which is ok because in case of an error NULL is returned.
         }
     }
 
     g_key_file_free (conf_file);
 
-    // TODO check that values are usable (int > 0, etc)
-    // TODO g_free err_msg if set + g_free microphone_device + g_strfreev ignore_apps + g_free config_values
+    if (config_values->check_interval < 5) {
+        g_printerr ("You have chosen a check_interval which is too aggressive. Falling back to the default value.\n");
+        set_default_values (DEFAULT_CHECK_INTERVAL, -1, NULL, config_values);
+    }
+    if (config_values->notification_timeout < 0) {
+        g_printerr("notification_timeout value can't be a negative number. Falling back to the default value.\n");
+        set_default_values (-1, DEFAULT_NOTIFICATION_TIMEOUT, NULL, config_values);
+    }
+
+    // TODO remember to g_free microphone_device + g_strfreev ignore_apps + g_free config_values
     return config_values;
 }
 

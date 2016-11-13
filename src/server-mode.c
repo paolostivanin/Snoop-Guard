@@ -26,6 +26,7 @@ server_mode (void)
         - check whether mic is being used
         - send notification
         - log somewhere
+        - how to treat ignored apps?
         - sleep default or as specified by interval
     */
     struct _devs *head, *tmp;
@@ -147,6 +148,7 @@ get_mic_status (const char *mic)
     snd_pcm_t *capture_handle = NULL;
 
     if (snd_pcm_open (&capture_handle, mic, SND_PCM_STREAM_CAPTURE, 0) < 0) {
+        // TODO This fails also if the device name is not correct. Device should be checked
         return MIC_ALREADY_IN_USE;
     }
     else {

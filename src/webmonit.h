@@ -23,6 +23,8 @@ typedef struct _conf_values_t {
 
 struct _devs *list_webcam (void);
 
+ConfigValues *load_config_file (void);
+
 int get_webcam_status (int fd, const char *dev_name);
 
 int get_mic_status (const char *mic);
