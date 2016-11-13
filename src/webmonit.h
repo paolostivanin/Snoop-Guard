@@ -5,11 +5,21 @@
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 
+#define DEFAULT_CHECK_INTERVAL 30
+#define DEFAULT_NOTIFICATION_TIMEOUT 5
+#define DEFAULT_MIC_NAME "sysdefault"
 
-extern struct _devs {
+struct _devs {
     char *dev_name;
     struct _devs *next;
 } *head, *curr;
+
+typedef struct _conf_values_t {
+    gint check_interval;
+    gint notification_timeout;
+    gchar *microphone_device;
+    gchar **ignore_apps;
+} ConfigValues;
 
 struct _devs *list_webcam (void);
 

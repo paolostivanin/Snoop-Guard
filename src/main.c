@@ -5,7 +5,8 @@
 void show_help (void);
 
 
-int main (int argc, char **argv)
+int
+main (int argc, char **argv)
 {
     int opt;
     while ((opt = getopt (argc, argv, "c:sh")) != -1) {
@@ -24,7 +25,8 @@ int main (int argc, char **argv)
 }
 
 
-void show_help ()
+void
+show_help ()
 {
     fprintf (stderr, "%s v%s developed by %s <%s>.\n"
             "A *wrong* option was specified. Available options are\n"

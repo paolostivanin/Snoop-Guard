@@ -17,7 +17,8 @@
 #define MIC_ALREADY_IN_USE 21
 
 
-int server_mode (void)
+int
+server_mode (void)
 {
     /* TODO:
         - get interval and ignored app from file
@@ -27,21 +28,21 @@ int server_mode (void)
         - log somewhere
         - sleep default or as specified by interval
     */
-    struct _devs *head_webcam, *tmp_webcam, *head_mic, *tmp_mic;
+    struct _devs *head, *tmp;
     int fd;
 
-    head_webcam = list_webcam ();
+    head = list_webcam ();
 
-    while (head_webcam) {
-        fd = open_device (head_webcam->dev_name);
-        init_device (fd, head_webcam->dev_name);
+    while (head) {
+        fd = open_device (head->dev_name);
+        init_device (fd, head->dev_name);
 
         if (fd >= 0)
             close (fd);
 
-        tmp_webcam = head_webcam;
-        head_webcam = head_webcam->next;
-        free (tmp_webcam);
+        tmp = head;
+        head = head->next;
+        free (tmp);
     }
 
     // TODO mic use sysdefault name or read from config file
@@ -51,7 +52,8 @@ int server_mode (void)
 }
 
 
-int open_device (const char *dev_name)
+int
+open_device (const char *dev_name)
 {
     struct stat st;
 
@@ -76,7 +78,8 @@ int open_device (const char *dev_name)
 }
 
 
-void init_device (int fd, const char *dev_name)
+void
+init_device (int fd, const char *dev_name)
 {
     struct v4l2_capability cap;
 
@@ -99,7 +102,8 @@ void init_device (int fd, const char *dev_name)
 }
 
 
-int xioctl (int fh, unsigned long request, void *arg)
+int
+xioctl (int fh, unsigned long request, void *arg)
 {
     int r;
 
@@ -111,7 +115,8 @@ int xioctl (int fh, unsigned long request, void *arg)
 }
 
 
-int get_webcam_status (int fd, const char *dev_name)
+int
+get_webcam_status (int fd, const char *dev_name)
 {
     struct v4l2_requestbuffers req;
 
@@ -136,7 +141,8 @@ int get_webcam_status (int fd, const char *dev_name)
 }
 
 
-int get_mic_status (const char *mic)
+int
+get_mic_status (const char *mic)
 {
     snd_pcm_t *capture_handle = NULL;
 
