@@ -9,9 +9,10 @@ To Do list:
 * :soon: client mode
 
 # Requirements
-* GCC or Clang
-* GTK+-3.0 and glib-2.0
-* alsa-lib
+* GCC or Clang (both)
+* GTK+-3.0 (client)
+* glib-2.0 (both)
+* alsa-lib (server)
 
 # LICENSE
 GPL 3.0 and above. Have a look at the LICENSE file for more information.
