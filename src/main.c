@@ -8,6 +8,7 @@ void show_help (void);
 int
 main (int argc, char **argv)
 {
+    // TODO replace with https://developer.gnome.org/glib/stable/glib-Commandline-option-parser.html
     int opt;
     while ((opt = getopt (argc, argv, "c:sh")) != -1) {
         switch (opt) {

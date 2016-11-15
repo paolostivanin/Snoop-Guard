@@ -1,6 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <glib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
@@ -17,7 +15,7 @@
 #define MIC_ALREADY_IN_USE 21
 
 
-int
+gint
 server_mode (void)
 {
     /* TODO:
@@ -30,9 +28,13 @@ server_mode (void)
         - sleep default or as specified by interval
     */
     struct _devs *head, *tmp;
-    int fd;
+    gint fd;
+
+    ConfigValues *cfg_values = load_config_file ();
 
     head = list_webcam ();
+    // TODO: readlink ("/proc/FPID/fd/FDNUM", buf, buflen). If buf == /dev/videoX then do something
+    // get_ppid_from_pname. Then readlink. If webcam is listed and app is ignored then ignore.
 
     while (head) {
         fd = open_device (head->dev_name);
@@ -46,15 +48,24 @@ server_mode (void)
         free (tmp);
     }
 
-    // TODO mic use sysdefault name or read from config file
+    // TODO mic use sysdefault name or read from config file OR SKIP IT IF mic_name is NULL
     get_mic_status ("sysdefault");
+
+    // TODO check for NULL
+    if (cfg_values->microphone_device != NULL)
+        g_free (cfg_values->microphone_device);
+
+    if (cfg_values->ignore_apps != NULL);
+        g_strfreev (cfg_values->ignore_apps);
+
+    g_free (cfg_values);
 
     return 0;
 }
 
 
-int
-open_device (const char *dev_name)
+gint
+open_device (const gchar *dev_name)
 {
     struct stat st;
 
@@ -80,7 +91,7 @@ open_device (const char *dev_name)
 
 
 void
-init_device (int fd, const char *dev_name)
+init_device (gint fd, const gchar *dev_name)
 {
     struct v4l2_capability cap;
 
@@ -103,10 +114,10 @@ init_device (int fd, const char *dev_name)
 }
 
 
-int
-xioctl (int fh, unsigned long request, void *arg)
+gint
+xioctl (gint fh, gulong request, void *arg)
 {
-    int r;
+    gint r;
 
     do {
         r = ioctl (fh, request, arg);
@@ -116,8 +127,8 @@ xioctl (int fh, unsigned long request, void *arg)
 }
 
 
-int
-get_webcam_status (int fd, const char *dev_name)
+gint
+get_webcam_status (gint fd, const gchar *dev_name)
 {
     struct v4l2_requestbuffers req;
 
@@ -142,13 +153,17 @@ get_webcam_status (int fd, const char *dev_name)
 }
 
 
-int
-get_mic_status (const char *mic)
+gint
+get_mic_status (const gchar *mic)
 {
+    // TODO: grep capture /proc/asound/devices. If 1 then sysdefault? And if 2 what? DEAL WITH MULTIPLE MIC
+    /* TODO arecord -L | grep -w sysdefault:CARD with system() could be a solution. Check the fork() thing to add more security
+     * (https://www.securecoding.cert.org/confluence/pages/viewpage.action?pageId=2130132)
+     */
     snd_pcm_t *capture_handle = NULL;
 
     if (snd_pcm_open (&capture_handle, mic, SND_PCM_STREAM_CAPTURE, 0) < 0) {
-        // TODO This fails also if the device name is not correct. Device should be checked
+        // TODO This fails also if the device name is not correct. Device presence should be checked
         return MIC_ALREADY_IN_USE;
     }
     else {

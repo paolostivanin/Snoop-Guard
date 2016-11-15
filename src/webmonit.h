@@ -5,12 +5,14 @@
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 
+#define CONFIG_FILE_NAME "webmonit.ini"
+
 #define DEFAULT_CHECK_INTERVAL 30
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
 #define DEFAULT_MIC_NAME "sysdefault"
 
 struct _devs {
-    char *dev_name;
+    gchar *dev_name;
     struct _devs *next;
 } *head, *curr;
 
@@ -25,18 +27,18 @@ struct _devs *list_webcam (void);
 
 ConfigValues *load_config_file (void);
 
-int get_webcam_status (int fd, const char *dev_name);
+gint get_webcam_status (gint fd, const gchar *dev_name);
 
-int get_mic_status (const char *mic);
+gint get_mic_status (const gchar *mic);
 
-int xioctl (int fh, unsigned long request, void *arg);
+gint xioctl (gint fh, gulong request, void *arg);
 
-void init_device (int fd, const char *dev_name);
+void init_device (gint fd, const gchar *dev_name);
 
-int open_device (const char *dev_name);
+gint open_device (const gchar *dev_name);
 
-int set_nonblock (int fd);
+gint set_nonblock (gint fd);
 
-int server_mode (void);
+gint server_mode (void);
 
-int client_mode (void);
+gint client_mode (void);

@@ -12,14 +12,16 @@ load_config_file ()
 
     GKeyFile *conf_file = g_key_file_new ();
 
-    // TODO think about a path
-    if (!g_key_file_load_from_file (conf_file, "PATH", G_KEY_FILE_NONE, &err)) {
+    gchar *config_file_path = g_strconcat (g_get_home_dir (), "/.config/", CONFIG_FILE_NAME, NULL);
+    if (!g_key_file_load_from_file (conf_file, config_file_path, G_KEY_FILE_NONE, &err)) {
         g_printerr ("%s\nUsing default values.\n", err->message);
         set_default_values (DEFAULT_CHECK_INTERVAL, DEFAULT_NOTIFICATION_TIMEOUT, DEFAULT_MIC_NAME, config_values);
         g_clear_error (&err);
+        g_free (config_file_path);
         g_key_file_free (conf_file);
         return config_values;
     }
+    g_free (config_file_path);
 
     if (!g_key_file_has_group (conf_file, "server")) {
         g_printerr ("Couldn't find the group [server] inside the config file. Using default values.\n");
@@ -66,7 +68,6 @@ load_config_file ()
         set_default_values (-1, DEFAULT_NOTIFICATION_TIMEOUT, NULL, config_values);
     }
 
-    // TODO remember to g_free microphone_device + g_strfreev ignore_apps + g_free config_values
     return config_values;
 }
 

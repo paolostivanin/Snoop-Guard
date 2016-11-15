@@ -14,5 +14,9 @@ To Do list:
 * glib-2.0 (both)
 * alsa-lib (server)
 
+# Limitations
+* `ignore_apps` is applied only to the webcam check. I haven't found a way to determine by which application the mic is being used. Feel free to open a PR if you know how to do it :)
+* only one microphone is supported. Again, feel free to open a PR if you wanna improve it :)
+
 # LICENSE
 GPL 3.0 and above. Have a look at the LICENSE file for more information.
