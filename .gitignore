@@ -1,3 +1,7 @@
+# Clion stuffs
+cmake-build-debug
+.idea
+
 # Object files
 *.o
 *.ko

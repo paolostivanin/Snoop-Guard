@@ -7,7 +7,8 @@
 
 #define CONFIG_FILE_NAME "webmonit.ini"
 
-#define DEFAULT_CHECK_INTERVAL 30
+#define DEFAULT_CHECK_WEBCAM_INTERVAL 30
+#define DEFAULT_CHECK_MIC_INTERVAL 30
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
 #define DEFAULT_MIC_NAME "sysdefault"
 
@@ -17,7 +18,8 @@ struct _devs {
 } *head, *curr;
 
 typedef struct _conf_values_t {
-    gint check_interval;
+    gint check_webcam_interval;
+    gint check_mic_interval;
     gint notification_timeout;
     gchar *microphone_device;
     gchar **ignore_apps;

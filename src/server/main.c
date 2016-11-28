@@ -6,7 +6,7 @@
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
 #include <alsa/asoundlib.h>
-#include "webmonit.h"
+#include "../common/webmonit.h"
 
 #define GENERIC_ERROR -1
 #define WEBCAM_NOT_IN_USE 10
@@ -16,7 +16,7 @@
 
 
 gint
-server_mode (void)
+main (gint argc, gchar **argv)
 {
     /* TODO:
         - get interval and ignored app from file
@@ -51,7 +51,6 @@ server_mode (void)
     // TODO mic use sysdefault name or read from config file OR SKIP IT IF mic_name is NULL
     get_mic_status ("sysdefault");
 
-    // TODO check for NULL
     if (cfg_values->microphone_device != NULL)
         g_free (cfg_values->microphone_device);
 
