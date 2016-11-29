@@ -12,6 +12,11 @@
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
 #define DEFAULT_MIC_NAME "sysdefault"
 
+#define GENERIC_ERROR -1
+#define WEBCAM_NOT_IN_USE 10
+#define WEBCAM_ALREADY_IN_USE 11
+#define WEBCAM_USED_BY_IGNORED_APP 12
+
 struct _devs {
     gchar *dev_name;
     struct _devs *next;
@@ -29,18 +34,8 @@ struct _devs *list_webcam (void);
 
 ConfigValues *load_config_file (void);
 
-gint get_webcam_status (gint fd, const gchar *dev_name);
-
 gint get_mic_status (const gchar *mic);
 
-gint xioctl (gint fh, gulong request, void *arg);
+void check_webcam (const gchar *dev_name, gchar **ignore_apps);
 
-void init_device (gint fd, const gchar *dev_name);
-
-gint open_device (const gchar *dev_name);
-
-gint set_nonblock (gint fd);
-
-gint server_mode (void);
-
-gint client_mode (void);
+guint get_ppid_from_pname (const gchar *pname);
