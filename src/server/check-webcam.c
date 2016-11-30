@@ -1,9 +1,9 @@
 #include <glib.h>
+#include <glib/gstdio.h>
 #include <errno.h>
 #include <unistd.h>
 #include <memory.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
 #include <gio/gio.h>
@@ -26,11 +26,21 @@ gboolean get_webcam_from_open_fd (const gchar *dev_name, guint pid);
 void
 check_webcam (const gchar *dev_name, gchar **ignore_apps)
 {
-    gint fd = open_device (head->dev_name);
-    init_device (fd, head->dev_name, ignore_apps);
+    gint fd = open_device (dev_name);
+    if (fd > 0) {
+        gint status = init_device (fd, dev_name, ignore_apps);
+        if (status == WEBCAM_ALREADY_IN_USE) {
+            // TODO send notification and log
+        } else if (status == WEBCAM_USED_BY_IGNORED_APP) {
+            // TODO log
+        } else {
+            // TODO log (?)
+        }
 
-    if (fd >= 0)
         close (fd);
+    } else {
+        // TODO notification or log?
+    }
 }
 
 
@@ -61,19 +71,6 @@ open_device (const gchar *dev_name)
 
 
 gint
-xioctl (gint fh, gulong request, void *arg)
-{
-    gint r;
-
-    do {
-        r = ioctl (fh, request, arg);
-    } while (r == -1 && errno == EINTR);
-
-    return r;
-}
-
-
-gint
 init_device (gint fd, const gchar *dev_name, gchar **ignore_apps)
 {
     struct v4l2_capability cap;
@@ -92,8 +89,20 @@ init_device (gint fd, const gchar *dev_name, gchar **ignore_apps)
         return GENERIC_ERROR;
     }
 
+    return get_webcam_status (fd, dev_name, ignore_apps);
+}
 
-    get_webcam_status (fd, dev_name, ignore_apps);
+
+gint
+xioctl (gint fh, gulong request, void *arg)
+{
+    gint r;
+
+    do {
+        r = ioctl (fh, request, arg);
+    } while (r == -1 && errno == EINTR);
+
+    return r;
 }
 
 

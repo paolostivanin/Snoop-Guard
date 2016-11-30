@@ -1,5 +1,4 @@
 #include <glib.h>
-#include <unistd.h>
 #include <alsa/asoundlib.h>
 #include "../common/webmonit.h"
 
@@ -20,7 +19,6 @@ main (gint argc, gchar **argv)
         - sleep default or as specified by interval
     */
     struct _devs *head, *tmp;
-    gint fd;
 
     ConfigValues *cfg_values = load_config_file ();
 
@@ -35,8 +33,8 @@ main (gint argc, gchar **argv)
     }
 
     if (cfg_values->microphone_device != NULL) {
-        get_mic_status(cfg_values->microphone_device);
-        g_free(cfg_values->microphone_device);
+        get_mic_status (cfg_values->microphone_device);
+        g_free (cfg_values->microphone_device);
     }
 
     if (cfg_values->ignore_apps != NULL) {
