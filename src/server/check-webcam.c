@@ -7,6 +7,8 @@
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
 #include <gio/gio.h>
+#include <libnotify/notification.h>
+#include "sg-notification.h"
 #include "../common/webmonit.h"
 
 
@@ -27,10 +29,11 @@ void
 check_webcam (const gchar *dev_name, gchar **ignore_apps)
 {
     gint fd = open_device (dev_name);
+    NotifyNotification *notification = sg_create_notification ("YOU ARE BEING SNOOPED", "An application is currently using your webcam");
     if (fd > 0) {
         gint status = init_device (fd, dev_name, ignore_apps);
         if (status == WEBCAM_ALREADY_IN_USE) {
-            // TODO send notification and log
+            sg_notification_show (notification, 5);
         } else if (status == WEBCAM_USED_BY_IGNORED_APP) {
             // TODO log
         } else {

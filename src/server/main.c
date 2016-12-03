@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <glib.h>
 #include <alsa/asoundlib.h>
 #include "sg-notification.h"
@@ -11,23 +12,18 @@ gint
 main (gint argc, gchar **argv)
 {
     /* TODO:
-        - get interval and ignored app from file
-        - check whether webcam are being used
-        - check whether mic is being used
-        - send notification
         - log somewhere
-        - how to treat ignored apps?
         - sleep default or as specified by interval
     */
     struct _devs *head, *tmp;
 
     ConfigValues *cfg_values = load_config_file ();
 
-    head = list_webcam ();
-
     if (sg_notification_init ("sg-server") == INIT_ERROR) {
         g_printerr ("Couldn't initialize notification server, only logs will be used\n");
     }
+
+    head = list_webcam ();
     while (head) {
         check_webcam (head->dev_name, cfg_values->ignore_apps);
         g_free (head->dev_name);
@@ -37,7 +33,11 @@ main (gint argc, gchar **argv)
     }
 
     if (cfg_values->microphone_device != NULL) {
-        get_mic_status (cfg_values->microphone_device);
+        if (get_mic_status (cfg_values->microphone_device) == MIC_ALREADY_IN_USE) {
+            g_printerr ("Your mic IS being used!\n");
+        } else {
+            g_printerr ("The mic is NOT being used\n");
+        }
         g_free (cfg_values->microphone_device);
     }
 

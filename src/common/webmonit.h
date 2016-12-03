@@ -5,7 +5,7 @@
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 
-#define CONFIG_FILE_NAME "webmonit.ini"
+#define CONFIG_FILE_NAME "snoop-guard.ini"
 
 #define DEFAULT_CHECK_WEBCAM_INTERVAL 30
 #define DEFAULT_CHECK_MIC_INTERVAL 30

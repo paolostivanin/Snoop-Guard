@@ -1,9 +1,10 @@
 #pragma once
 
-#define NOTIFICATION_ERROR -2;
-#define INIT_ERROR -1;
-#define INIT_OK 0;
-#define ALREADY_INITTED 1;
+#include <libnotify/notify.h>
+
+#define INIT_ERROR -1
+#define INIT_OK 0
+#define ALREADY_INITTED 1
 
 gint sg_notification_init (const gchar *app_name);
 

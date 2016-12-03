@@ -24,7 +24,7 @@ struct _devs *list_webcam ()
         } else {
             close (fd);
             curr = malloc (sizeof (struct _devs));
-            curr->dev_name = strdup (tmp_name);
+            curr->dev_name = g_strdup (tmp_name);
             curr->next = head;
             head = curr;
             free (tmp_name);
