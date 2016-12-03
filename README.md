@@ -5,14 +5,15 @@ Receive a notification every time your webcam and/or you microphone are being us
 * check whether a webcam is being used or not :white_check_mark:
 * use all video dev and not only one :white_check_mark:
 * check whether the mic is being used or not :white_check_mark:
-* :on: server mode
-* :soon: client mode
+* :on: server
+* :soon: client
 
-# Requirements for Client and Server
-* GCC/Clang (both)
-* GTK+-3.0 (client only)
-* glib-2.0 (both)
-* alsa-lib (server only)
+# Requirements
+* GCC/Clang
+* GTK+-3.0
+* glib-2.0
+* alsa-lib
+* libnotify
 
 # Limitations
 * `ignore_apps` is applied only to the webcam check. I haven't found a way to determine by which application the mic is being used. Feel free to open a PR if you know how to do it :)

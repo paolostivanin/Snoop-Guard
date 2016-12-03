@@ -1,5 +1,6 @@
 #include <glib.h>
 #include <alsa/asoundlib.h>
+#include "sg-notification.h"
 #include "../common/webmonit.h"
 
 #define MIC_NOT_IN_USE 20
@@ -24,6 +25,9 @@ main (gint argc, gchar **argv)
 
     head = list_webcam ();
 
+    if (sg_notification_init ("sg-server") == INIT_ERROR) {
+        g_printerr ("Couldn't initialize notification server, only logs will be used\n");
+    }
     while (head) {
         check_webcam (head->dev_name, cfg_values->ignore_apps);
         g_free (head->dev_name);
@@ -42,6 +46,7 @@ main (gint argc, gchar **argv)
     }
 
     g_free (cfg_values);
+    sg_notification_uninit ();
 
     return 0;
 }
