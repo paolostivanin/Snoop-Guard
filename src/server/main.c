@@ -2,6 +2,7 @@
 #include <glib.h>
 #include <alsa/asoundlib.h>
 #include "sg-notification.h"
+#include "sg-logging.h"
 #include "../common/webmonit.h"
 
 #define MIC_NOT_IN_USE 20
@@ -12,9 +13,10 @@ gint
 main (gint argc, gchar **argv)
 {
     /* TODO:
-        - log somewhere
-        - sleep default or as specified by interval
-    */
+     *  - write log to proper dir
+     *  - write proper systemd daemon
+     *  - sleep default or as specified by interval
+     */
     struct _devs *head, *tmp;
 
     ConfigValues *cfg_values = load_config_file ();
