@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <glib.h>
-#include "../common/webmonit.h"
+#include "main.h"
 
 
 struct _devs *list_webcam ()

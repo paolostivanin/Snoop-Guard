@@ -17,6 +17,9 @@
 #define WEBCAM_ALREADY_IN_USE 11
 #define WEBCAM_USED_BY_IGNORED_APP 12
 
+#define MIC_NOT_IN_USE 20
+#define MIC_ALREADY_IN_USE 21
+
 struct _devs {
     gchar *dev_name;
     struct _devs *next;

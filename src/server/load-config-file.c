@@ -1,5 +1,5 @@
 #include <glib.h>
-#include "webmonit.h"
+#include "main.h"
 
 static void set_default_values (gint check_webcam_interval, gint check_mic_interval, gint notification_timeout, gchar *mic_name, ConfigValues *cv);
 

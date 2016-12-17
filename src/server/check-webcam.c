@@ -9,7 +9,7 @@
 #include <gio/gio.h>
 #include <libnotify/notification.h>
 #include "sg-notification.h"
-#include "../common/webmonit.h"
+#include "main.h"
 
 
 gint open_device (const gchar *dev_name);
