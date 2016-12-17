@@ -12,13 +12,18 @@
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
 #define DEFAULT_MIC_NAME "sysdefault"
 
+#define SYSDEFAULT_DEV_NOT_FOUND -2
 #define GENERIC_ERROR -1
+
 #define WEBCAM_NOT_IN_USE 10
 #define WEBCAM_ALREADY_IN_USE 11
 #define WEBCAM_USED_BY_IGNORED_APP 12
 
 #define MIC_NOT_IN_USE 20
 #define MIC_ALREADY_IN_USE 21
+#define SYSDEFAULT_FOUND 22
+
+
 
 struct _devs {
     gchar *dev_name;

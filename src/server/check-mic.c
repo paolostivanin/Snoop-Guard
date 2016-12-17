@@ -12,14 +12,15 @@ gint
 get_mic_status (const gchar *mic)
 {
     if (g_strcmp0 (mic, "sysdefault") == 0) {
-        // TODO check error
-        check_sysdefault_dev ();
+        gint status = check_sysdefault_dev ();
+        if (status != SYSDEFAULT_FOUND) {
+            return status;
+        }
     }
 
     snd_pcm_t *capture_handle = NULL;
 
     if (snd_pcm_open (&capture_handle, mic, SND_PCM_STREAM_CAPTURE, 0) < 0) {
-        // TODO This fails also if the device name is not correct. Device presence should be checked
         return MIC_ALREADY_IN_USE;
     }
     else {
