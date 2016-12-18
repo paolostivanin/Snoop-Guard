@@ -1,19 +1,24 @@
 #include <glib.h>
+#include <sys/types.h>
 #include <signal.h>
 #include "sg-notification.h"
 #include "main.h"
 
 
-volatile static gboolean sigterm = FALSE;
+volatile static gboolean signal_received = FALSE;
 
-static void on_sigterm (gint);
+static void signal_handler (gint sig, siginfo_t *si, gpointer context);
 
 
 gint
 main (gint argc, gchar **argv)
 {
-    // TODO: get which app is using the webcam
-    signal (SIGTERM, on_sigterm);
+    struct sigaction sig_sa;
+    sig_sa.sa_flags = SA_SIGINFO;
+    sig_sa.sa_sigaction = signal_handler;
+    sigaction(SIGTERM, &sig_sa, NULL);
+    sigaction(SIGINT, &sig_sa, NULL);
+    sigaction(SIGALRM, &sig_sa, NULL);
 
     struct _devs *head, *tmp;
 
@@ -34,7 +39,7 @@ main (gint argc, gchar **argv)
     }
 
     g_print ("Starting %s with a checking interval of %ld seconds...\n", SW_NAME, cfg_values->check_interval);
-    while (!sigterm) {
+    while (!signal_received) {
         head = list_webcam ();
         while (head) {
             check_webcam (head->dev_name, cfg_values->ignore_apps);
@@ -66,7 +71,17 @@ main (gint argc, gchar **argv)
 
 
 static void
-on_sigterm (gint sig_num)
+signal_handler (gint sig, siginfo_t *si __attribute__((unused)), gpointer context  __attribute__((unused)))
 {
-    sigterm = TRUE;
+    switch(sig)
+    {
+        case SIGINT:
+        case SIGTERM:
+        case SIGALRM:
+            g_print ("Cleaning up and exiting...\n");
+            signal_received = TRUE;
+            break;
+        default:
+            break;
+    }
 }

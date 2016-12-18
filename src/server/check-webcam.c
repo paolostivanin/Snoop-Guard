@@ -22,18 +22,29 @@ gint get_webcam_status (gint fd, const gchar *dev_name, gchar **ignore_apps);
 
 gboolean ignored_app_using_webcam (const gchar *dev_name, gchar **ignored_apps);
 
-gboolean get_webcam_from_open_fd (const gchar *dev_name, guint pid);
+gboolean get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_get_proc);
+
+gchar *get_proc_using_webcam (const gchar *webcam_dev);
 
 
 void
 check_webcam (const gchar *dev_name, gchar **ignore_apps)
 {
+    gchar *message;
     gint fd = open_device (dev_name);
-    NotifyNotification *notification = sg_create_notification ("YOU ARE BEING SNOOPED", "An application is currently using your webcam");
     if (fd > 0) {
         gint status = init_device (fd, dev_name, ignore_apps);
         if (status == WEBCAM_ALREADY_IN_USE) {
+            gchar *proc_name = get_proc_using_webcam (dev_name);
+            if (proc_name != NULL) {
+                message = g_strconcat (proc_name, " is currently using your webcam", NULL);
+                g_free (proc_name);
+            } else {
+                message = g_strdup ("A process is currently using your webcam");
+            }
+            NotifyNotification *notification = sg_create_notification ("YOU ARE BEING SNOOPED", message);
             sg_notification_show (notification, 5);
+            g_free (message);
         }
         close (fd);
     }
@@ -142,7 +153,7 @@ ignored_app_using_webcam (const gchar *dev_name, gchar **ignored_apps)
     for (gint i = 0; i < g_strv_length (ignored_apps); i++) {
         guint pid = get_ppid_from_pname (ignored_apps[i]);
         if (pid != 0) {
-            if (get_webcam_from_open_fd (dev_name, pid)) {
+            if (get_webcam_from_open_fd (dev_name, pid, FALSE) == WEBCAM_FOUND) {
                 return TRUE;
             }
         }
@@ -152,8 +163,8 @@ ignored_app_using_webcam (const gchar *dev_name, gchar **ignored_apps)
 }
 
 
-gboolean
-get_webcam_from_open_fd (const gchar *dev_name, guint pid)
+gint
+get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_get_proc)
 {
     gchar *pid_str = g_strdup_printf ("%u", pid);
     gchar *path = g_strconcat ("/proc/", pid_str, "/fd", NULL);
@@ -161,7 +172,9 @@ get_webcam_from_open_fd (const gchar *dev_name, guint pid)
     GError *err = NULL;
     GDir *dir = g_dir_open (path, 0, &err);
     if (err != NULL) {
-        g_printerr ("%s\n", err->message);
+        if (!called_from_get_proc) {
+            g_printerr ("%s\n", err->message);
+        }
         return GENERIC_ERROR;
     }
 
@@ -181,7 +194,7 @@ get_webcam_from_open_fd (const gchar *dev_name, guint pid)
                 g_free (pid_str);
                 g_free (path);
                 g_object_unref (file);
-                return TRUE;
+                return WEBCAM_FOUND;
             }
         }
         g_free (complete_path);
@@ -193,5 +206,33 @@ get_webcam_from_open_fd (const gchar *dev_name, guint pid)
     g_free (pid_str);
     g_free (path);
 
-    return FALSE;
+    return WEBCAM_NOT_FOUND;
+}
+
+
+gchar *
+get_proc_using_webcam (const gchar *webcam_dev)
+{
+    gchar *file, *contents, **stat_tokens;
+    gsize length;
+    GError *err = NULL;
+    gchar *proc = NULL;
+
+    for (guint i = 1000; i < 40000; i++) {
+        if (get_webcam_from_open_fd (webcam_dev, i, TRUE) == WEBCAM_FOUND) {
+            gchar *i_str = g_strdup_printf ("%d", i);
+            file = g_strconcat ("/proc/", i_str, "/stat", NULL);
+            g_file_get_contents (file, &contents, &length, &err);
+            stat_tokens = g_strsplit (contents, " ", 3);
+            proc = g_malloc0 (strlen(stat_tokens[1]) - 1);  //we remove ( and ) but we add \0
+            memcpy (proc, stat_tokens[1] + 1, strlen (stat_tokens[1]) - 2);
+            proc[strlen(stat_tokens[1]) -1] = '\0';
+            g_strfreev (stat_tokens);
+            g_free (i_str);
+            g_free (contents);
+            g_free (file);
+            break;
+        }
+    }
+    return proc;
 }
