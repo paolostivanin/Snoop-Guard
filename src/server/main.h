@@ -1,14 +1,14 @@
 #pragma once
 
-#define SW_NAME "WebMonit"
-#define SW_VERSION "1.0-alpha"
+#define SW_NAME "Snoop Guard"
+#define SW_VERSION "1.0.0-beta.1"
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 
 #define CONFIG_FILE_NAME "snoop-guard.ini"
+#define LOG_FILE "/var/log/"
 
-#define DEFAULT_CHECK_WEBCAM_INTERVAL 30
-#define DEFAULT_CHECK_MIC_INTERVAL 30
+#define DEFAULT_CHECK_INTERVAL 30
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
 #define DEFAULT_MIC_NAME "sysdefault"
 
@@ -31,8 +31,7 @@ struct _devs {
 } *head, *curr;
 
 typedef struct _conf_values_t {
-    gint check_webcam_interval;
-    gint check_mic_interval;
+    gulong check_interval;
     gint notification_timeout;
     gchar *microphone_device;
     gchar **ignore_apps;
@@ -47,3 +46,5 @@ gint get_mic_status (const gchar *mic);
 void check_webcam (const gchar *dev_name, gchar **ignore_apps);
 
 guint get_ppid_from_pname (const gchar *pname);
+
+gint check_sysdefault_dev (void);

@@ -1,32 +1,27 @@
 #define _GNU_SOURCE
 #include <glib.h>
+#include <glib/gprintf.h>
 #include <gio/gio.h>
 #include <alsa/asoundlib.h>
 #include "main.h"
 
 
-gint check_sysdefault_dev ();
-
-
 gint
 get_mic_status (const gchar *mic)
 {
-    if (g_strcmp0 (mic, "sysdefault") == 0) {
-        gint status = check_sysdefault_dev ();
-        if (status != SYSDEFAULT_FOUND) {
-            return status;
-        }
-    }
-
+    gint status;
     snd_pcm_t *capture_handle = NULL;
-
     if (snd_pcm_open (&capture_handle, mic, SND_PCM_STREAM_CAPTURE, 0) < 0) {
-        return MIC_ALREADY_IN_USE;
+        g_print ("Mic IS being used\n");
+        status = MIC_ALREADY_IN_USE;
     }
     else {
-        snd_pcm_close (capture_handle);
-        return MIC_NOT_IN_USE;
+        g_print ("Mic is NOT being used\n");
+        status = MIC_NOT_IN_USE;
     }
+
+    snd_pcm_close (capture_handle);
+    return status;
 }
 
 
@@ -47,11 +42,12 @@ check_sysdefault_dev ()
         g_clear_error (&err);
         return GENERIC_ERROR;
     }
-    if (g_strstr_len (output, -1, "sysdefault:CARD") == NULL) {
-        g_free(output);
-        return SYSDEFAULT_FOUND;
-    } else {
+
+    if (g_strrstr (output, "sysdefault") == NULL) {
         g_free(output);
         return SYSDEFAULT_DEV_NOT_FOUND;
+    } else {
+        g_free(output);
+        return SYSDEFAULT_FOUND;
     }
 }

@@ -1,4 +1,4 @@
-# Snoop Guard (alpha)
+# Snoop Guard (beta)
 Receive a notification every time your webcam and/or you microphone are being used
 
 # Todo list:
@@ -14,6 +14,11 @@ Receive a notification every time your webcam and/or you microphone are being us
 * glib-2.0
 * alsa-lib
 * libnotify
+
+# How To
+Put the `snoop-guard.service` file under `$HOME/.config/systemd/user/`. Then execute:
+* `systemctl --user daemo-reload`
+* `systemctl --user enable snoop-guard`
 
 # Limitations
 * `ignore_apps` is applied only to the webcam check. I haven't found a way to determine by which application the mic is being used. Feel free to open a PR if you know how to do it :)

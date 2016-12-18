@@ -1,0 +1,14 @@
+[Unit]
+Description=Snoop Guard
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/snoop-guard
+Environment=DISPLAY=:0
+PIDFile=/var/run/snoop-guard.pid
+StandardOutput=journal+console
+StandardError=journal+console
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

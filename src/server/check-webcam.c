@@ -34,15 +34,8 @@ check_webcam (const gchar *dev_name, gchar **ignore_apps)
         gint status = init_device (fd, dev_name, ignore_apps);
         if (status == WEBCAM_ALREADY_IN_USE) {
             sg_notification_show (notification, 5);
-        } else if (status == WEBCAM_USED_BY_IGNORED_APP) {
-            // TODO log
-        } else {
-            // TODO log (?)
         }
-
         close (fd);
-    } else {
-        // TODO notification or log?
     }
 }
 
@@ -126,13 +119,14 @@ get_webcam_status (gint fd, const gchar *dev_name, gchar **ignore_apps)
             return GENERIC_ERROR;
         } else {
             if (!ignored_app_using_webcam (dev_name, ignore_apps)) {
-                g_print ("Webcam is being used\n");
+                g_print ("Webcam IS being used\n");
                 return WEBCAM_ALREADY_IN_USE;
             }
+            g_print ("Webcam IS being used by one of the ignored_apps\n");
             return WEBCAM_USED_BY_IGNORED_APP;
         }
     } else {
-        g_print ("Webcam is not being used\n");
+        g_print ("Webcam is NOT being used\n");
         return WEBCAM_NOT_IN_USE;
     }
 }
