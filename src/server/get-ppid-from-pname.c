@@ -9,7 +9,7 @@ guint get_ppid_from_pname (const gchar *pname)
     GError *err = NULL;
     guint pid = 0;
 
-    for (gint i = 1000; i < 30000; i++) {
+    for (gint i = 1000; i < 40000; i++) {
         gchar *i_str = g_strdup_printf ("%d", i);
         file = g_strconcat ("/proc/", i_str, "/stat", NULL);
         g_free (i_str);
