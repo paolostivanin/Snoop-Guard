@@ -1,12 +1,11 @@
 #pragma once
 
 #define SW_NAME "Snoop Guard"
-#define SW_VERSION "1.0.0-beta.1"
+#define SW_VERSION "1.0.0-beta.3"
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 
 #define CONFIG_FILE_NAME "snoop-guard.ini"
-#define LOG_FILE "/var/log/"
 
 #define DEFAULT_CHECK_INTERVAL 30
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
@@ -45,7 +44,7 @@ ConfigValues *load_config_file (void);
 
 gint get_mic_status (const gchar *mic);
 
-void check_webcam (const gchar *dev_name, gchar **ignore_apps);
+void check_webcam (gint notif_server_status, const gchar *dev_name, gchar **ignore_apps);
 
 guint get_ppid_from_pname (const gchar *pname);
 

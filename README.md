@@ -5,8 +5,8 @@ Receive a notification every time your webcam and/or you microphone are being us
 * check whether a webcam is being used or not :white_check_mark:
 * use all video dev and not only one :white_check_mark:
 * check whether the mic is being used or not :white_check_mark:
-* :on: server
-* :soon: client
+* server :white_check_mark:
+* :on: client
 
 # Requirements
 * GCC/Clang

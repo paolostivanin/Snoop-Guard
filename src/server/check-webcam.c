@@ -28,7 +28,7 @@ gchar *get_proc_using_webcam (const gchar *webcam_dev);
 
 
 void
-check_webcam (const gchar *dev_name, gchar **ignore_apps)
+check_webcam (gint nss, const gchar *dev_name, gchar **ignore_apps)
 {
     gchar *message;
     gint fd = open_device (dev_name);
@@ -42,8 +42,12 @@ check_webcam (const gchar *dev_name, gchar **ignore_apps)
             } else {
                 message = g_strdup ("A process is currently using your webcam");
             }
-            NotifyNotification *notification = sg_create_notification ("YOU ARE BEING SNOOPED", message);
-            sg_notification_show (notification, 5);
+            if (nss != INIT_ERROR) {
+                NotifyNotification *notification = sg_create_notification ("YOU ARE BEING SNOOPED", message);
+                sg_notification_show (notification, 5);
+            } else {
+                g_print ("YOU ARE BEING SNOOPED: %s\n", message);
+            }
             g_free (message);
         }
         close (fd);
