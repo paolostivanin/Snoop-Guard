@@ -15,9 +15,12 @@ Receive a notification every time your webcam and/or you microphone are being us
 * alsa-lib
 * libnotify
 
+# Installation
+TODO
+
 # How To
 Put the `snoop-guard.service` file under `$HOME/.config/systemd/user/`. Then execute:
-* `systemctl --user daemo-reload`
+* `systemctl --user daemon-reload`
 * `systemctl --user enable snoop-guard`
 
 # Limitations

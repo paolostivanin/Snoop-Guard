@@ -44,6 +44,7 @@ check_webcam (gint nss, const gchar *dev_name, gchar **ignore_apps)
             }
             if (nss != INIT_ERROR) {
                 NotifyNotification *notification = sg_create_notification ("YOU ARE BEING SNOOPED", message);
+                notify_notification_set_urgency (notification, NOTIFY_URGENCY_CRITICAL);
                 sg_notification_show (notification, 5);
             } else {
                 g_print ("YOU ARE BEING SNOOPED: %s\n", message);
