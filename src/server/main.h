@@ -1,15 +1,7 @@
 #pragma once
 
-#define SW_NAME "Snoop Guard"
-#define SW_VERSION "1.0.0-beta.3"
-#define DEV_NAME "Paolo Stivanin"
-#define DEV_EMAIL "info@paolostivanin.com"
-
-#define CONFIG_FILE_NAME "snoop-guard.ini"
-
 #define DEFAULT_CHECK_INTERVAL 30
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
-#define DEFAULT_MIC_NAME "sysdefault"
 
 #define SYSDEFAULT_DEV_NOT_FOUND -2
 #define GENERIC_ERROR -1

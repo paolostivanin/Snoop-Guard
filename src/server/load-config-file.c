@@ -1,5 +1,6 @@
 #include <glib.h>
 #include "main.h"
+#include "../common.h"
 
 static void set_default_values (gulong check_interval, gint notification_timeout, gchar *mic_name, ConfigValues *cv);
 

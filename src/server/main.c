@@ -3,6 +3,7 @@
 #include <signal.h>
 #include "sg-notification.h"
 #include "main.h"
+#include "../common.h"
 
 
 volatile static gboolean signal_received = FALSE;
