@@ -1,4 +1,5 @@
 #include <glib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <signal.h>
 #include "sg-notification.h"
@@ -20,6 +21,8 @@ main (gint argc, gchar **argv)
     }
 
     struct sigaction sig_sa;
+    memset (&sig_sa, 0, sizeof (sig_sa));
+
     sig_sa.sa_flags = SA_SIGINFO;
     sig_sa.sa_sigaction = signal_handler;
     sigaction (SIGTERM, &sig_sa, NULL);

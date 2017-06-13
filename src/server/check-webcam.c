@@ -32,7 +32,7 @@ check_webcam (gint nss, const gchar *dev_name, gchar **ignore_apps)
 {
     gchar *message;
     gint fd = open_device (dev_name);
-    if (fd > 0) {
+    if (fd >= 0) {
         gint status = init_device (fd, dev_name, ignore_apps);
         if (status == WEBCAM_ALREADY_IN_USE) {
             gchar *proc_name = get_proc_using_webcam (dev_name);
@@ -59,22 +59,21 @@ check_webcam (gint nss, const gchar *dev_name, gchar **ignore_apps)
 gint
 open_device (const gchar *dev_name)
 {
-    struct stat st;
-
-    if (stat (dev_name, &st) == -1) {
-        g_printerr ("Cannot identify '%s': %d, %s\n", dev_name, errno, g_strerror (errno));
-        return GENERIC_ERROR;
-    }
-
-    if (!S_ISCHR (st.st_mode)) {
-        g_printerr ("%s is no device\n", dev_name);
-        return GENERIC_ERROR;
-    }
-
     int fd = open (dev_name, O_RDWR | O_NONBLOCK, 0);
-
     if (fd == -1) {
         g_printerr ("Cannot open '%s': %d, %s\n", dev_name, errno, g_strerror (errno));
+        return GENERIC_ERROR;
+    }
+
+    struct stat st;
+    if (stat (dev_name, &st) == -1) {
+        g_printerr ("Cannot identify '%s': %d, %s\n", dev_name, errno, g_strerror (errno));
+        close (fd);
+        return GENERIC_ERROR;
+    }
+    if (!S_ISCHR (st.st_mode)) {
+        g_printerr ("%s is no device\n", dev_name);
+        close (fd);
         return GENERIC_ERROR;
     }
 
