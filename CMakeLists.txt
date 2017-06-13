@@ -13,8 +13,8 @@ set(SOURCE_FILES
         src/server/check-webcam.c
         src/server/sg-notification.c
         src/server/sg-logging.c
-        src/server/check-mic.c
-        src/client/main.c)
+        src/server/check-mic.c)
+        #src/client/main.c)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)

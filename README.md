@@ -1,4 +1,8 @@
 # Snoop Guard (beta)
+<a href="https://scan.coverity.com/projects/paolostivanin-snoop-guard">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/12910/badge.svg"/>
+</a>
 Receive a notification every time your webcam and/or you microphone are being used
 
 # Todo list:
