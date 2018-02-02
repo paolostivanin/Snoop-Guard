@@ -3,6 +3,9 @@
   <img alt="Coverity Scan Build Status"
        src="https://scan.coverity.com/projects/12910/badge.svg"/>
 </a>
+
+[![Run Status](https://api.shippable.com/projects/58e3d5769401b40600a7c02e/badge?branch=master)](https://app.shippable.com/github/paolostivanin/Snoop-Guard)
+
 Receive a notification every time your webcam and/or you microphone are being used
 
 # Todo list:
@@ -14,7 +17,7 @@ Receive a notification every time your webcam and/or you microphone are being us
 
 # Requirements
 * GCC/Clang
-* GTK+-3.0
+* GTK+-3.0 (only needed if the client is built)
 * glib-2.0
 * alsa-lib
 * libnotify
