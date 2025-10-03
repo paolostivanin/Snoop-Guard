@@ -1,14 +1,40 @@
 [Unit]
-Description=Snoop Guard
+Description=Snoop Guard daemon (monitors webcam and microphone usage)
+Documentation=https://github.com/paolostivanin/Snoop-Guard
+Wants=graphical-session.target
+After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/snoop-guard
-Environment=DISPLAY=:0
-PIDFile=/var/run/snoop-guard.pid
-StandardOutput=journal+console
-StandardError=journal+console
-Restart=always
+ExecStart=/usr/bin/sg-daemon
+# Run in the user session; no PID file needed
+Restart=on-failure
+RestartSec=2s
+# Security hardening (keep compatible with desktop usage)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+# Do not isolate devices: needs access to /dev/video* and /dev/snd/*
+PrivateDevices=no
+# No network access required by the daemon
+IPAddressDeny=any
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+# Journal is enough
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

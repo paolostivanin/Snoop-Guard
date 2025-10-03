@@ -1,7 +1,9 @@
 #pragma once
 
 #define SW_NAME "Snoop Guard"
-#define SW_VERSION "1.0.0-beta.3"
+#ifndef SW_VERSION
+#define SW_VERSION "dev"
+#endif
 #define DEV_NAME "Paolo Stivanin"
 #define DEV_EMAIL "info@paolostivanin.com"
 

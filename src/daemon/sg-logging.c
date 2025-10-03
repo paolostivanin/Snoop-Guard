@@ -3,11 +3,16 @@
 #include <string.h>
 #include "sg-logging.h"
 
+static const gchar *log_file_path = NULL;
 
 void
 sg_log_init (const gchar *file_path)
 {
-    g_log_set_handler (NULL, G_LOG_LEVEL_INFO | G_LOG_LEVEL_MESSAGE | G_LOG_LEVEL_WARNING | G_LOG_LEVEL_CRITICAL | G_LOG_FLAG_RECURSION, sg_log_handler, (gpointer) file_path);
+    log_file_path = file_path;
+    g_log_set_handler (NULL,
+                       G_LOG_LEVEL_INFO | G_LOG_LEVEL_MESSAGE | G_LOG_LEVEL_WARNING | G_LOG_LEVEL_CRITICAL | G_LOG_FLAG_RECURSION,
+                       sg_log_handler,
+                       NULL);
 }
 
 
@@ -32,7 +37,8 @@ sg_log_handler (const gchar *log_domain __attribute__((unused)),
                 const gchar *message,
                 gpointer user_data)
 {
-    const gchar *log_file = (gchar *) user_data;
+    (void)user_data;
+    const gchar *log_file = log_file_path;
     GDateTime *dt = g_date_time_new_now_local ();
     gchar *dts = g_date_time_format (dt, "%T %F");
 

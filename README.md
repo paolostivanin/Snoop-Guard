@@ -1,38 +1,86 @@
-# Snoop Guard (beta)
-<a href="https://scan.coverity.com/projects/paolostivanin-snoop-guard">
-  <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/12910/badge.svg"/>
-</a>
+# Snoop Guard
 
-[![Run Status](https://api.shippable.com/projects/58e3d5769401b40600a7c02e/badge?branch=master)](https://app.shippable.com/github/paolostivanin/Snoop-Guard)
+Receive a notification every time your webcam and/or your microphone are being used.
 
-Receive a notification every time your webcam and/or you microphone are being used
+Project status: active, user-space daemon + CLI.
 
-# Todo list:
-* check whether a webcam is being used or not :white_check_mark:
-* use all video dev and not only one :white_check_mark:
-* check whether the mic is being used or not :white_check_mark:
-* server :white_check_mark:
-* :on: client
+## Requirements
+- GCC or Clang
+- glib-2.0, gio-2.0, gobject-2.0
+- alsa-lib (for microphone checks)
+- libnotify (desktop notifications)
 
-# Requirements
-* GCC/Clang
-* GTK+-3.0 (only needed if the client is built)
-* glib-2.0
-* alsa-lib
-* libnotify
+## Build
+```
+$ mkdir -p build && cd build
+$ cmake -DCMAKE_BUILD_TYPE=Release ..
+$ cmake --build .
+```
 
-# Installation
-TODO
+Check version:
+```
+$ ./sg-daemon --version
+$ ./sg-ctl --version
+```
 
-# How To
-Put the `snoop-guard.service` file under `$HOME/.config/systemd/user/`. Then execute:
-* `systemctl --user daemon-reload`
-* `systemctl --user enable snoop-guard`
+## Configuration
+Snoop Guard reads its configuration from: `$HOME/.config/snoop-guard.ini`
 
-# Limitations
-* `ignore_apps` is applied only to the webcam check. I haven't found a way to determine by which application the mic is being used. Feel free to open a PR if you know how to do it :)
-* only one microphone is supported. Again, feel free to open a PR if you wanna improve it :)
+A sample configuration is provided at the repository root as `snoop-guard.ini`.
+Copy it to your config directory and adjust values:
+```
+$ mkdir -p "$HOME/.config"
+$ cp ./snoop-guard.ini "$HOME/.config/snoop-guard.ini"
+```
 
-# LICENSE
-GPL 3.0 and above. Have a look at the LICENSE file for more information.
+Relevant options:
+- [server]
+  - `check_interval`: polling interval in seconds (> 5)
+  - `notification_timeout`: seconds; 0 = manual dismissal
+  - `microphone_device`: ALSA device name (e.g., sysdefault). If unset/invalid, mic checks are skipped
+- [policy]
+  - `allow_list`: semicolon-separated process names that will NOT trigger a notification when using the webcam
+  - `deny_list`: semicolon-separated process names that WILL trigger a notification when using the webcam
+
+Notes:
+- The policy lists apply to webcam checks. Microphone process attribution is not available yet.
+
+## Running as a user service (systemd)
+This project is intended to run as a per-user systemd service. A unit file is provided: `snoop-guard.service`.
+
+Install and enable:
+
+```
+$ mkdir -p "$HOME/.config/systemd/user"
+$ cp ./snoop-guard.service "$HOME/.config/systemd/user/"
+$ systemctl --user daemon-reload
+$ systemctl --user enable --now snoop-guard.service
+```
+
+By default the unit expects the binary at `/usr/bin/sg-daemon`. If you run it from a custom location, override ExecStart with a user drop-in:
+```
+$ systemctl --user edit snoop-guard.service
+```  
+and add:
+```
+   [Service]
+   ExecStart=
+   ExecStart=/absolute/path/to/sg-daemon
+```
+
+## CLI usage
+The `sg-ctl` tool connects over the user session D-Bus to query status and recent events:
+- `sg-ctl status`
+- `sg-ctl recent [N]`
+- `sg-ctl --help`
+
+## Limitations
+- Only one microphone device can be monitored at a time.
+- We currently cannot reliably attribute which process is using the microphone; allow/deny lists apply to webcam usage only.
+
+## Security
+- The provided systemd unit includes modern hardening options while preserving access to `/dev/video*` and `/dev/snd/*`.
+- See SECURITY.md for the vulnerability disclosure policy and hardening details.
+
+## License
+GPL-3.0-or-later. See LICENSE for details.

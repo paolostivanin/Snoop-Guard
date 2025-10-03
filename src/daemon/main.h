@@ -21,13 +21,14 @@
 struct _devs {
     gchar *dev_name;
     struct _devs *next;
-} *head, *curr;
+};
 
 typedef struct _conf_values_t {
     gulong check_interval;
     gint notification_timeout;
     gchar *microphone_device;
-    gchar **ignore_apps;
+    gchar **allow_list; // apps that are allowed, no notifications
+    gchar **deny_list;  // apps that are denied, always notify
 } ConfigValues;
 
 struct _devs *list_webcam (void);
@@ -36,7 +37,7 @@ ConfigValues *load_config_file (void);
 
 gint get_mic_status (const gchar *mic);
 
-void check_webcam (gint notif_server_status, const gchar *dev_name, gchar **ignore_apps);
+void check_webcam (gint notif_server_status, const gchar *dev_name, gchar **allow_list, gchar **deny_list);
 
 guint get_ppid_from_pname (const gchar *pname);
 

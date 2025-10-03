@@ -7,49 +7,63 @@
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
 #include <gio/gio.h>
-#include <libnotify/notification.h>
 #include "sg-notification.h"
 #include "main.h"
+#include "sg-state.h"
 
 
 gint open_device (const gchar *dev_name);
 
 gint xioctl (gint fh, gulong request, void *arg);
 
-gint init_device (gint fd, const gchar *dev_name, gchar **ignore_apps);
+gint init_device (gint fd, const gchar *dev_name);
 
-gint get_webcam_status (gint fd, const gchar *dev_name, gchar **ignore_apps);
-
-gboolean ignored_app_using_webcam (const gchar *dev_name, gchar **ignored_apps);
+gint get_webcam_status (gint fd, const gchar *dev_name);
 
 gboolean get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_get_proc);
 
 gchar *get_proc_using_webcam (const gchar *webcam_dev);
 
 
+static gboolean strv_contains(gchar **list, const gchar *name)
+{
+    if (!list || !name) return FALSE;
+    for (gchar **p = list; *p; ++p) {
+        if (g_strcmp0(*p, name) == 0) return TRUE;
+    }
+    return FALSE;
+}
+
 void
-check_webcam (gint nss, const gchar *dev_name, gchar **ignore_apps)
+check_webcam (gint nss, const gchar *dev_name, gchar **allow_list, gchar **deny_list)
 {
     gchar *message;
     gint fd = open_device (dev_name);
     if (fd >= 0) {
-        gint status = init_device (fd, dev_name, ignore_apps);
+        gint status = init_device (fd, dev_name);
         if (status == WEBCAM_ALREADY_IN_USE) {
             gchar *proc_name = get_proc_using_webcam (dev_name);
+            sg_state_set_webcam(TRUE, proc_name);
+            gboolean allowed = strv_contains(allow_list, proc_name);
+            gboolean denied = strv_contains(deny_list, proc_name);
             if (proc_name != NULL) {
                 message = g_strconcat (proc_name, " is currently using your webcam", NULL);
-                g_free (proc_name);
             } else {
                 message = g_strdup ("A process is currently using your webcam");
             }
-            if (nss != INIT_ERROR) {
-                NotifyNotification *notification = sg_create_notification ("YOU ARE BEING SNOOPED", message);
-                notify_notification_set_urgency (notification, NOTIFY_URGENCY_CRITICAL);
-                sg_notification_show (notification, 5);
-            } else {
-                g_print ("YOU ARE BEING SNOOPED: %s\n", message);
+            // Notify only if not explicitly allowed
+            if (!allowed) {
+                if (nss != INIT_ERROR) {
+                    sg_send_notification ("YOU ARE BEING SNOOPED", message, 5000);
+                } else {
+                    g_print ("YOU ARE BEING SNOOPED: %s\n", message);
+                }
             }
+            (void)denied; // reserved for future policy handling
+            g_free (proc_name);
             g_free (message);
+        } else {
+            sg_state_set_webcam(FALSE, NULL);
         }
         close (fd);
     }
@@ -82,7 +96,7 @@ open_device (const gchar *dev_name)
 
 
 gint
-init_device (gint fd, const gchar *dev_name, gchar **ignore_apps)
+init_device (gint fd, const gchar *dev_name)
 {
     struct v4l2_capability cap;
 
@@ -100,7 +114,7 @@ init_device (gint fd, const gchar *dev_name, gchar **ignore_apps)
         return GENERIC_ERROR;
     }
 
-    return get_webcam_status (fd, dev_name, ignore_apps);
+    return get_webcam_status (fd, dev_name);
 }
 
 
@@ -118,7 +132,7 @@ xioctl (gint fh, gulong request, void *arg)
 
 
 gint
-get_webcam_status (gint fd, const gchar *dev_name, gchar **ignore_apps)
+get_webcam_status (gint fd, const gchar *dev_name)
 {
     struct v4l2_requestbuffers req;
 
@@ -133,12 +147,8 @@ get_webcam_status (gint fd, const gchar *dev_name, gchar **ignore_apps)
             g_printerr ("%s does not support memory mapping\n", dev_name);
             return GENERIC_ERROR;
         } else {
-            if (!ignored_app_using_webcam (dev_name, ignore_apps)) {
-                g_print ("Webcam IS being used\n");
-                return WEBCAM_ALREADY_IN_USE;
-            }
-            g_print ("Webcam IS being used by one of the ignored_apps\n");
-            return WEBCAM_USED_BY_IGNORED_APP;
+            g_print ("Webcam IS being used\n");
+            return WEBCAM_ALREADY_IN_USE;
         }
     } else {
         g_print ("Webcam is NOT being used\n");
@@ -154,7 +164,7 @@ ignored_app_using_webcam (const gchar *dev_name, gchar **ignored_apps)
         return FALSE;
     }
 
-    for (gint i = 0; i < g_strv_length (ignored_apps); i++) {
+    for (guint i = 0, n = (guint)g_strv_length(ignored_apps); i < n; i++) {
         guint pid = get_ppid_from_pname (ignored_apps[i]);
         if (pid != 0) {
             if (get_webcam_from_open_fd (dev_name, pid, FALSE) == WEBCAM_FOUND) {

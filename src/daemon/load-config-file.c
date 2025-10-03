@@ -2,14 +2,15 @@
 #include "main.h"
 #include "../common.h"
 
-static void set_default_values (gulong check_interval, gint notification_timeout, gchar *mic_name, ConfigValues *cv);
+static void set_default_values (gulong check_interval, gint notification_timeout, const gchar *mic_name, ConfigValues *cv);
 
 ConfigValues *
 load_config_file ()
 {
     GError *err = NULL;
     ConfigValues *config_values = g_new0 (ConfigValues, 1);
-    config_values->ignore_apps = NULL;
+    config_values->allow_list = NULL;
+    config_values->deny_list = NULL;
 
     GKeyFile *conf_file = g_key_file_new ();
 
@@ -50,10 +51,13 @@ load_config_file ()
             set_default_values (0, 0, DEFAULT_MIC_NAME, config_values);
         }
 
-        // if no values are there, then ignore_apps[0] = NULL
-        config_values->ignore_apps = g_key_file_get_string_list (conf_file, "server", "ignore_apps", NULL, &err);
+        // policy lists
+        config_values->allow_list = g_key_file_get_string_list (conf_file, "policy", "allow_list", NULL, &err);
         if (err != NULL) {
-            g_printerr ("%s\nUsing default value.\n", err->message);
+            g_clear_error (&err);
+        }
+        config_values->deny_list = g_key_file_get_string_list (conf_file, "policy", "deny_list", NULL, &err);
+        if (err != NULL) {
             g_clear_error (&err);
         }
     }
@@ -74,7 +78,7 @@ load_config_file ()
 
 
 static void
-set_default_values (gulong ci, gint nt, gchar *mn, ConfigValues *cv)
+set_default_values (gulong ci, gint nt, const gchar *mn, ConfigValues *cv)
 {
     if (ci > 5)
         cv->check_interval = ci;
