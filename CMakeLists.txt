@@ -1,6 +1,18 @@
 cmake_minimum_required(VERSION 3.16)
 project(SnoopGuard VERSION "1.0.0" LANGUAGES C)
 
+# Pre-release tag (can be empty)
+set(PROJECT_VERSION_SUFFIX "-beta2")
+
+# Compose full version (e.g., 1.0.0-beta1). If suffix is empty, it's just the version.
+set(PROJECT_VERSION_FULL "${PROJECT_VERSION}${PROJECT_VERSION_SUFFIX}")
+
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/src/version.h
+        @ONLY
+)
+
 # Common requirements
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0 gio-2.0 gobject-2.0)
@@ -28,6 +40,7 @@ target_link_libraries(sg_common INTERFACE
 
 target_include_directories(sg_common INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_BINARY_DIR}/src
 )
 
 target_compile_definitions(sg_common INTERFACE

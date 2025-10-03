@@ -6,7 +6,7 @@
 #include "sg-dbus.h"
 #include "sg-state.h"
 #include "main.h"
-#include "../common.h"
+#include "version.h"
 
 static GMainLoop *main_loop = NULL;
 
@@ -17,7 +17,7 @@ static void signal_handler (gint sig, siginfo_t *si, gpointer context);
 int main (int argc, char **argv)
 {
     if (argc > 1 && (g_strcmp0 (argv[1], "-v") == 0 || g_strcmp0 (argv[1], "--version") == 0)) {
-        g_print ("%s v%s developed by %s <%s>\n", SW_NAME, SW_VERSION, DEV_NAME, DEV_EMAIL);
+        g_print ("%s v%s developed by %s\n", SW_NAME, SNOOPGUARD_VERSION_FULL, DEV_NAME);
         return 0;
     }
 

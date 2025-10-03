@@ -1,7 +1,7 @@
 #include <gio/gio.h>
 #include <glib.h>
 #include <stdio.h>
-#include "../common.h"
+#include "version.h"
 
 static void print_status(void) {
     GError *err = NULL;
@@ -55,7 +55,7 @@ static void print_recent(int max_lines) {
 
 int main(int argc, char **argv) {
     if (argc > 1 && (g_strcmp0(argv[1], "-v") == 0 || g_strcmp0(argv[1], "--version") == 0)) {
-        g_print("%s v%s developed by %s <%s>\n", SW_NAME, SW_VERSION, DEV_NAME, DEV_EMAIL);
+        g_print("%s v%s developed by %s\n", SW_NAME, SNOOPGUARD_VERSION_FULL, DEV_NAME);
         return 0;
     }
     if (argc > 1 && (g_strcmp0(argv[1], "-h") == 0 || g_strcmp0(argv[1], "--help") == 0)) {
