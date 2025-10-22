@@ -189,6 +189,9 @@ get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_
         if (!called_from_get_proc) {
             g_printerr ("%s\n", err->message);
         }
+        g_clear_error(&err);
+        g_free(pid_str);
+        g_free(path);
         return GENERIC_ERROR;
     }
 
@@ -207,9 +210,11 @@ get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_
                 g_dir_close (dir);
                 g_free (pid_str);
                 g_free (path);
+                g_object_unref (file_info);
                 g_object_unref (file);
                 return WEBCAM_FOUND;
             }
+            g_object_unref (file_info);
         }
         g_free (complete_path);
         g_object_unref (file);
@@ -236,11 +241,19 @@ get_proc_using_webcam (const gchar *webcam_dev)
         if (get_webcam_from_open_fd (webcam_dev, i, TRUE) == WEBCAM_FOUND) {
             gchar *i_str = g_strdup_printf ("%d", i);
             file = g_strconcat ("/proc/", i_str, "/stat", NULL);
-            g_file_get_contents (file, &contents, &length, &err);
+            if (!g_file_get_contents (file, &contents, &length, &err)) {
+                if (err) g_clear_error(&err);
+                g_free (i_str);
+                g_free (file);
+                continue;
+            }
             stat_tokens = g_strsplit (contents, " ", 3);
-            proc = g_malloc0 (strlen(stat_tokens[1]) - 1);  //we remove ( and ) but we add \0
-            memcpy (proc, stat_tokens[1] + 1, strlen (stat_tokens[1]) - 2);
-            proc[strlen(stat_tokens[1]) -1] = '\0';
+            if (stat_tokens && stat_tokens[1] && strlen(stat_tokens[1]) >= 2 && stat_tokens[1][0] == '(') {
+                gsize name_len = strlen(stat_tokens[1]);
+                proc = g_malloc0 (name_len - 1);  // remove parentheses, add \0
+                memcpy (proc, stat_tokens[1] + 1, name_len - 2);
+                proc[name_len - 2] = '\0';
+            }
             g_strfreev (stat_tokens);
             g_free (i_str);
             g_free (contents);

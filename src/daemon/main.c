@@ -54,7 +54,7 @@ int main (int argc, char **argv)
     typedef struct { ConfigValues *cfg; gint nss; } Ctx;
     Ctx *ctx = g_new0(Ctx, 1); ctx->cfg = cfg_values; ctx->nss = notification_server_status;
 
-    g_timeout_add_seconds((guint)cfg_values->check_interval, on_periodic_check, ctx);
+    g_timeout_add_seconds_full(G_PRIORITY_DEFAULT, (guint)cfg_values->check_interval, on_periodic_check, ctx, (GDestroyNotify)g_free);
 
     g_print ("Starting %s with a checking interval of %lu seconds...\n", SW_NAME, (unsigned long)cfg_values->check_interval);
     g_main_loop_run(main_loop);

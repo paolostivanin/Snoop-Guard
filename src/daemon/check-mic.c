@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <string.h>
+#include <limits.h>
 #include "main.h"
 #include "sg-state.h"
 

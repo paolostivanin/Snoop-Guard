@@ -53,18 +53,19 @@ static void handle_method_call(GDBusConnection *connection,
     } else if (g_strcmp0(method_name, "GetRecentEvents") == 0) {
         gint max_lines = 100;
         g_variant_get(parameters, "(i)", &max_lines);
-        if (max_lines <= 0) max_lines = 100;
+        if (max_lines <= 0) max_lines = 100; else if (max_lines > 1000) max_lines = 1000;
         // naive tail implementation: read user log file and return last N lines
         gchar *log_path = g_build_filename(g_get_user_state_dir(), "snoop-guard", "events.log", NULL);
         gchar *contents = NULL;
         gsize len = 0;
         GError *err = NULL;
-        if (!g_file_get_contents(log_path, &contents, &len, &err)) {
-            g_clear_error(&err);
+        if (!g_file_get_contents(log_path, &contents, &len, &err) || contents == NULL || len == 0) {
+            if (err) g_clear_error(&err);
             GVariantBuilder b;
             g_variant_builder_init(&b, G_VARIANT_TYPE("as"));
             g_dbus_method_invocation_return_value(invocation, g_variant_new("(as)", &b));
             g_free(log_path);
+            if (contents) g_free(contents);
             return;
         }
         GPtrArray *lines = g_ptr_array_new_with_free_func(g_free);
