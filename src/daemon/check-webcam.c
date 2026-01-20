@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <memory.h>
+#include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
@@ -23,6 +24,8 @@ gint get_webcam_status (gint fd, const gchar *dev_name);
 gboolean get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_get_proc);
 
 gchar *get_proc_using_webcam (const gchar *webcam_dev);
+
+static gchar *extract_proc_name (const gchar *stat_contents);
 
 
 static gboolean strv_contains(gchar **list, const gchar *name)
@@ -51,15 +54,15 @@ check_webcam (gint nss, const gchar *dev_name, gchar **allow_list, gchar **deny_
             } else {
                 message = g_strdup ("A process is currently using your webcam");
             }
-            // Notify only if not explicitly allowed
-            if (!allowed) {
+            // deny list always notifies; allow list suppresses notifications
+            gboolean should_notify = denied || !allowed;
+            if (should_notify) {
                 if (nss != INIT_ERROR) {
                     sg_send_notification ("YOU ARE BEING SNOOPED", message, 5000);
                 } else {
                     g_print ("YOU ARE BEING SNOOPED: %s\n", message);
                 }
             }
-            (void)denied; // reserved for future policy handling
             g_free (proc_name);
             g_free (message);
         } else {
@@ -232,7 +235,7 @@ get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_
 gchar *
 get_proc_using_webcam (const gchar *webcam_dev)
 {
-    gchar *file, *contents, **stat_tokens;
+    gchar *file, *contents;
     gsize length;
     GError *err = NULL;
     gchar *proc = NULL;
@@ -247,14 +250,7 @@ get_proc_using_webcam (const gchar *webcam_dev)
                 g_free (file);
                 continue;
             }
-            stat_tokens = g_strsplit (contents, " ", 3);
-            if (stat_tokens && stat_tokens[1] && strlen(stat_tokens[1]) >= 2 && stat_tokens[1][0] == '(') {
-                gsize name_len = strlen(stat_tokens[1]);
-                proc = g_malloc0 (name_len - 1);  // remove parentheses, add \0
-                memcpy (proc, stat_tokens[1] + 1, name_len - 2);
-                proc[name_len - 2] = '\0';
-            }
-            g_strfreev (stat_tokens);
+            proc = extract_proc_name (contents);
             g_free (i_str);
             g_free (contents);
             g_free (file);
@@ -262,4 +258,24 @@ get_proc_using_webcam (const gchar *webcam_dev)
         }
     }
     return proc;
+}
+
+static gchar *
+extract_proc_name (const gchar *stat_contents)
+{
+    if (stat_contents == NULL) {
+        return NULL;
+    }
+
+    const gchar *start = strchr (stat_contents, '(');
+    const gchar *end = strrchr (stat_contents, ')');
+    if (start == NULL || end == NULL || end <= start + 1) {
+        return NULL;
+    }
+
+    gsize len = (gsize)(end - start - 1);
+    gchar *name = g_malloc0 (len + 1);
+    memcpy (name, start + 1, len);
+    name[len] = '\0';
+    return name;
 }

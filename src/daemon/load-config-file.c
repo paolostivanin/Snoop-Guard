@@ -14,16 +14,24 @@ load_config_file ()
 
     GKeyFile *conf_file = g_key_file_new ();
 
-    gchar *config_file_path = g_strconcat (g_get_home_dir(), "/.config/", CONFIG_FILE_NAME, NULL);
+    const gchar *config_dir_env = g_getenv ("XDG_CONFIG_HOME");
+    gchar *config_dir = NULL;
+    if (config_dir_env == NULL || *config_dir_env == '\0') {
+        config_dir = g_build_filename (g_get_home_dir (), ".config", NULL);
+        config_dir_env = config_dir;
+    }
+    gchar *config_file_path = g_strconcat (config_dir_env, "/", CONFIG_FILE_NAME, NULL);
     if (!g_key_file_load_from_file (conf_file, config_file_path, G_KEY_FILE_NONE, &err)) {
         g_printerr ("%s\nUsing default values.\n", err->message);
         set_default_values (DEFAULT_CHECK_INTERVAL, DEFAULT_NOTIFICATION_TIMEOUT, DEFAULT_MIC_NAME, config_values);
         g_clear_error (&err);
         g_free (config_file_path);
+        g_free (config_dir);
         g_key_file_free (conf_file);
         return config_values;
     }
     g_free (config_file_path);
+    g_free (config_dir);
 
     if (!g_key_file_has_group (conf_file, "server")) {
         g_printerr ("Couldn't find the group [server] inside the config file. Using default values.\n");
