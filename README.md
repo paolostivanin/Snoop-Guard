@@ -8,7 +8,7 @@ Project status: active, user-space daemon + CLI.
 - GCC or Clang
 - glib-2.0, gio-2.0, gobject-2.0
 - libnotify (desktop notifications)
-- PipeWire (for microphone checks via `pw-cli`)
+- PipeWire development headers (libpipewire-0.3)
 
 ## Build
 ```

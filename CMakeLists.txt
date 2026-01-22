@@ -16,6 +16,7 @@ configure_file(
 # Common requirements
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0 gio-2.0 gobject-2.0)
+pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
 
 # Shared compile/link settings
 add_library(sg_common INTERFACE)
@@ -36,6 +37,7 @@ target_link_options(sg_common INTERFACE
 
 target_link_libraries(sg_common INTERFACE
         PkgConfig::GLIB
+        PkgConfig::PIPEWIRE
 )
 
 target_include_directories(sg_common INTERFACE
