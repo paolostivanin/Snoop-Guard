@@ -7,8 +7,8 @@ Project status: active, user-space daemon + CLI.
 ## Requirements
 - GCC or Clang
 - glib-2.0, gio-2.0, gobject-2.0
-- alsa-lib (for microphone checks)
 - libnotify (desktop notifications)
+- PipeWire (for microphone checks via `pw-cli`)
 
 ## Build
 ```
@@ -37,13 +37,13 @@ Relevant options:
 - [server]
   - `check_interval`: polling interval in seconds (> 5)
   - `notification_timeout`: seconds; 0 = manual dismissal
-  - `microphone_device`: ALSA device name (e.g., sysdefault). If unset/invalid, mic checks are skipped
+  - `microphone_device`: optional PipeWire node/application filter; if unset/empty, any active capture node triggers mic checks
 - [policy]
   - `allow_list`: semicolon-separated process names that will NOT trigger a notification when using the webcam
   - `deny_list`: semicolon-separated process names that WILL trigger a notification when using the webcam
 
 Notes:
-- The policy lists apply to webcam checks. Microphone process attribution is not available yet.
+- The policy lists apply to webcam checks. Microphone process attribution is best-effort via PipeWire metadata.
 
 ## Running as a user service (systemd)
 This project is intended to run as a per-user systemd service. A unit file is provided: `snoop-guard.service`.
@@ -72,11 +72,11 @@ and add:
 The `sg-ctl` tool connects over the user session D-Bus to query status and recent events:
 - `sg-ctl status`
 - `sg-ctl recent [N]`
+- `sg-ctl watch`
 - `sg-ctl --help`
 
 ## Limitations
-- Only one microphone device can be monitored at a time.
-- We currently cannot reliably attribute which process is using the microphone; allow/deny lists apply to webcam usage only.
+- Microphone attribution depends on PipeWire node metadata and may be unavailable for some clients; allow/deny lists apply to webcam usage only.
 
 ## Security
 - The provided systemd unit includes modern hardening options while preserving access to `/dev/video*` and `/dev/snd/*`.

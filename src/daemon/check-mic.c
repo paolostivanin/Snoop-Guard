@@ -1,98 +1,161 @@
-#define _GNU_SOURCE
 #include <glib.h>
-#include <glib/gprintf.h>
 #include <gio/gio.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <errno.h>
 #include <string.h>
-#include <limits.h>
 #include "main.h"
 #include "sg-state.h"
 
-static gboolean path_is_capture_pcm(const gchar *path)
+typedef struct {
+    gchar *node_name;
+    gchar *media_class;
+    gchar *state;
+    gchar *app_name;
+    gchar *app_binary;
+} PwNodeInfo;
+
+static gchar *extract_quoted_value(const gchar *line)
 {
-    // Simple heuristic: /dev/snd/pcmC*D*c (ending with 'c' means capture device)
-    if (!path) return FALSE;
-    if (g_str_has_prefix(path, "/dev/snd/pcm") && g_str_has_suffix(path, "c")) return TRUE;
-    return FALSE;
+    if (!line) return NULL;
+    const gchar *start = strchr(line, '"');
+    const gchar *end = strrchr(line, '"');
+    if (!start || !end || end <= start) return NULL;
+    return g_strndup(start + 1, (gsize)(end - start - 1));
 }
 
-static gchar* read_comm(guint pid)
+static gboolean is_capture_node(const PwNodeInfo *node)
 {
-    gchar *comm_path = g_strdup_printf("/proc/%u/comm", pid);
-    gchar *content = NULL; gsize len = 0;
-    if (g_file_get_contents(comm_path, &content, &len, NULL)) {
-        g_strchomp(content);
-        g_free(comm_path);
-        return content;
+    if (!node->media_class || !node->state) return FALSE;
+    if (g_strcmp0(node->state, "running") != 0) return FALSE;
+    return g_strrstr(node->media_class, "Audio/Source") != NULL ||
+           g_strrstr(node->media_class, "Stream/Input/Audio") != NULL;
+}
+
+static gboolean node_matches_filter(const PwNodeInfo *node, const gchar *filter)
+{
+    if (!filter || !*filter) return TRUE;
+    gchar *filter_l = g_ascii_strdown(filter, -1);
+    gboolean match = FALSE;
+    if (node->node_name) {
+        gchar *name_l = g_ascii_strdown(node->node_name, -1);
+        match = g_strrstr(name_l, filter_l) != NULL;
+        g_free(name_l);
     }
-    g_free(comm_path);
+    if (!match && node->app_name) {
+        gchar *app_l = g_ascii_strdown(node->app_name, -1);
+        match = g_strrstr(app_l, filter_l) != NULL;
+        g_free(app_l);
+    }
+    g_free(filter_l);
+    return match;
+}
+
+static gchar *pick_proc_name(const PwNodeInfo *node)
+{
+    if (node->app_binary && *node->app_binary) return g_strdup(node->app_binary);
+    if (node->app_name && *node->app_name) return g_strdup(node->app_name);
+    if (node->node_name && *node->node_name) return g_strdup(node->node_name);
     return NULL;
 }
 
-static gboolean process_uses_capture(guint pid, gchar **proc_name_out)
+static gboolean parse_pw_cli_output(const gchar *output, const gchar *filter, gchar **proc_name_out)
 {
-    gchar *fd_dir = g_strdup_printf("/proc/%u/fd", pid);
-    DIR *dir = opendir(fd_dir);
-    if (!dir) { g_free(fd_dir); return FALSE; }
-    gboolean found = FALSE;
-    struct dirent *de;
-    gchar link_path[PATH_MAX];
-    gchar target[PATH_MAX];
-    while ((de = readdir(dir)) != NULL) {
-        if (de->d_name[0] == '.') continue;
-        g_snprintf(link_path, sizeof(link_path), "%s/%s", fd_dir, de->d_name);
-        ssize_t r = readlink(link_path, target, sizeof(target)-1);
-        if (r > 0) {
-            target[r] = '\0';
-            if (path_is_capture_pcm(target)) {
-                found = TRUE;
+    if (!output) return FALSE;
+    gchar **lines = g_strsplit(output, "\n", -1);
+    PwNodeInfo node = {0};
+    gboolean active = FALSE;
+
+    for (guint i = 0; lines[i] != NULL; i++) {
+        gchar *line = g_strstrip(lines[i]);
+        if (g_str_has_prefix(line, "id ")) {
+            if (is_capture_node(&node) && node_matches_filter(&node, filter)) {
+                active = TRUE;
+                if (proc_name_out) *proc_name_out = pick_proc_name(&node);
                 break;
             }
+            g_clear_pointer(&node.node_name, g_free);
+            g_clear_pointer(&node.media_class, g_free);
+            g_clear_pointer(&node.state, g_free);
+            g_clear_pointer(&node.app_name, g_free);
+            g_clear_pointer(&node.app_binary, g_free);
+            continue;
+        }
+        if (g_str_has_prefix(line, "node.name =")) {
+            g_clear_pointer(&node.node_name, g_free);
+            node.node_name = extract_quoted_value(line);
+            continue;
+        }
+        if (g_str_has_prefix(line, "media.class =")) {
+            g_clear_pointer(&node.media_class, g_free);
+            node.media_class = extract_quoted_value(line);
+            continue;
+        }
+        if (g_str_has_prefix(line, "node.state =")) {
+            g_clear_pointer(&node.state, g_free);
+            node.state = extract_quoted_value(line);
+            continue;
+        }
+        if (g_str_has_prefix(line, "application.name =")) {
+            g_clear_pointer(&node.app_name, g_free);
+            node.app_name = extract_quoted_value(line);
+            continue;
+        }
+        if (g_str_has_prefix(line, "application.process.binary =")) {
+            g_clear_pointer(&node.app_binary, g_free);
+            node.app_binary = extract_quoted_value(line);
+            continue;
         }
     }
-    closedir(dir);
-    if (found && proc_name_out) {
-        *proc_name_out = read_comm(pid);
-    }
-    return found;
-}
 
-static gboolean any_process_uses_mic(gchar **proc_name_out)
-{
-    DIR *proc = opendir("/proc");
-    if (!proc) return FALSE;
-    struct dirent *de; gboolean active = FALSE; gchar *name = NULL;
-    while ((de = readdir(proc)) != NULL) {
-        if (de->d_type != DT_DIR) continue;
-        guint pid = (guint)g_ascii_strtoull(de->d_name, NULL, 10);
-        if (pid == 0) continue;
-        if (process_uses_capture(pid, &name)) { active = TRUE; break; }
+    if (!active && is_capture_node(&node) && node_matches_filter(&node, filter)) {
+        active = TRUE;
+        if (proc_name_out) *proc_name_out = pick_proc_name(&node);
     }
-    closedir(proc);
-    if (active && proc_name_out) *proc_name_out = name; else if (name) g_free(name);
+
+    g_clear_pointer(&node.node_name, g_free);
+    g_clear_pointer(&node.media_class, g_free);
+    g_clear_pointer(&node.state, g_free);
+    g_clear_pointer(&node.app_name, g_free);
+    g_clear_pointer(&node.app_binary, g_free);
+    g_strfreev(lines);
     return active;
 }
 
-int get_mic_status (const gchar *mic __attribute__((unused)))
+static gboolean any_pipewire_capture_active(const gchar *filter, gchar **proc_name_out)
+{
+    gchar *stdout_buf = NULL;
+    gchar *stderr_buf = NULL;
+    gint exit_status = 0;
+    GError *err = NULL;
+
+    if (!g_spawn_command_line_sync("pw-cli ls Node", &stdout_buf, &stderr_buf, &exit_status, &err)) {
+        g_printerr("Failed to run pw-cli: %s\n", err ? err->message : "unknown error");
+        g_clear_error(&err);
+        g_free(stdout_buf);
+        g_free(stderr_buf);
+        return FALSE;
+    }
+    if (exit_status != 0) {
+        if (stderr_buf && *stderr_buf) g_printerr("%s\n", stderr_buf);
+        g_free(stdout_buf);
+        g_free(stderr_buf);
+        return FALSE;
+    }
+
+    gboolean active = parse_pw_cli_output(stdout_buf, filter, proc_name_out);
+    g_free(stdout_buf);
+    g_free(stderr_buf);
+    return active;
+}
+
+int get_mic_status (const gchar *mic)
 {
     gchar *proc = NULL;
-    gboolean active = any_process_uses_mic(&proc);
+    gboolean active = any_pipewire_capture_active(mic, &proc);
     sg_state_set_mic(active, proc);
     if (proc) g_free(proc);
     if (active) {
         g_print("Mic IS being used\n");
         return MIC_ALREADY_IN_USE;
-    } else {
-        g_print("Mic is NOT being used\n");
-        return MIC_NOT_IN_USE;
     }
-}
-
-int check_sysdefault_dev ()
-{
-    // We no longer depend on ALSA to validate sysdefault; assume present on modern systems.
-    return SYSDEFAULT_FOUND;
+    g_print("Mic is NOT being used\n");
+    return MIC_NOT_IN_USE;
 }

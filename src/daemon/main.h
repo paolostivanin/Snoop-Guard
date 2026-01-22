@@ -3,7 +3,6 @@
 #define DEFAULT_CHECK_INTERVAL 30
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
 
-#define SYSDEFAULT_DEV_NOT_FOUND -2
 #define GENERIC_ERROR -1
 
 #define WEBCAM_NOT_IN_USE 10
@@ -14,10 +13,6 @@
 
 #define MIC_NOT_IN_USE 20
 #define MIC_ALREADY_IN_USE 21
-#define SYSDEFAULT_FOUND 22
-
-
-
 struct _devs {
     gchar *dev_name;
     struct _devs *next;
@@ -40,5 +35,3 @@ gint get_mic_status (const gchar *mic);
 void check_webcam (gint notif_server_status, const gchar *dev_name, gchar **allow_list, gchar **deny_list);
 
 guint get_ppid_from_pname (const gchar *pname);
-
-gint check_sysdefault_dev (void);

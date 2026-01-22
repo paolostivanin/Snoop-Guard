@@ -5,6 +5,7 @@
 #include "sg-notification.h"
 #include "sg-dbus.h"
 #include "sg-state.h"
+#include "sg-logging.h"
 #include "main.h"
 #include "version.h"
 
@@ -33,17 +34,14 @@ int main (int argc, char **argv)
     if (notification_server_status == INIT_ERROR)
         g_printerr ("Couldn't initialize notification server, only systemd journal will be used\n");
 
-    ConfigValues *cfg_values = load_config_file ();
+    gchar *state_dir = g_build_filename(g_get_user_state_dir(), "snoop-guard", NULL);
+    g_mkdir_with_parents(state_dir, 0700);
+    gchar *event_log_path = g_build_filename(state_dir, "events.log", NULL);
+    sg_log_init(event_log_path);
+    g_free(event_log_path);
+    g_free(state_dir);
 
-    if (cfg_values->microphone_device && g_strcmp0 (cfg_values->microphone_device, "sysdefault") == 0) {
-        gint status = check_sysdefault_dev ();
-        if (status != SYSDEFAULT_FOUND) {
-            g_printerr ("Couldn't find sysdefault device\n");
-            g_free (cfg_values);
-            sg_notification_uninit ();
-            return -1;
-        }
-    }
+    ConfigValues *cfg_values = load_config_file ();
 
     sg_state_init();
 
@@ -90,10 +88,7 @@ static gboolean on_periodic_check(gpointer user_data)
     if (!any_webcam_active) sg_state_set_webcam(FALSE, NULL);
 
     // mic check
-    if (ctx->cfg->microphone_device != NULL) {
-        gint ms = get_mic_status (ctx->cfg->microphone_device);
-        sg_state_set_mic(ms == MIC_ALREADY_IN_USE, NULL);
-    }
+    get_mic_status (ctx->cfg->microphone_device);
 
     SGStatus s = { sg_state.webcam_active, sg_state.mic_active, sg_state.webcam_proc, sg_state.mic_proc };
     sg_dbus_update_status(&s);

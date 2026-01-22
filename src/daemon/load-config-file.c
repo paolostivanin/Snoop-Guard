@@ -57,6 +57,9 @@ load_config_file ()
             g_printerr ("%s\nUsing default value.\n", err->message);
             g_clear_error (&err);
             set_default_values (0, 0, DEFAULT_MIC_NAME, config_values);
+        } else if (config_values->microphone_device != NULL && *config_values->microphone_device == '\0') {
+            g_free (config_values->microphone_device);
+            config_values->microphone_device = NULL;
         }
 
         // policy lists
@@ -94,6 +97,6 @@ set_default_values (gulong ci, gint nt, const gchar *mn, ConfigValues *cv)
     if (nt > 0)
         cv->notification_timeout = nt;
 
-    if (mn != NULL)
+    if (mn != NULL && *mn != '\0')
         cv->microphone_device = g_strdup (mn);
 }
