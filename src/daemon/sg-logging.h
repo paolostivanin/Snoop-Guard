@@ -1,10 +1,18 @@
 #pragma once
+#include <glib.h>
 
+#define SG_LOG_DEFAULT_MAX_BYTES (256 * 1024)
 
-void sg_log_init (const gchar *file_path);
+void sg_log_init (const gchar *file_path, gsize max_bytes);
 
-gchar *get_log_level_string (GLogLevelFlags log_levels);
+void sg_log_uninit (void);
 
-void sg_log_handler (const gchar *log_domain, GLogLevelFlags log_levels, const gchar *message, gpointer user_data);
+const gchar *sg_log_get_path (void);
 
 void sg_log_event (const gchar *event);
+
+/* For internal/testing use; registered as a glib log handler by sg_log_init. */
+void sg_log_handler (const gchar *log_domain,
+                     GLogLevelFlags log_levels,
+                     const gchar *message,
+                     gpointer user_data);

@@ -2,101 +2,114 @@
 #include "main.h"
 #include "../common.h"
 
-static void set_default_values (gulong check_interval, gint notification_timeout, const gchar *mic_name, ConfigValues *cv);
-
-ConfigValues *
-load_config_file ()
+static gchar *
+default_config_path (void)
 {
-    GError *err = NULL;
-    ConfigValues *config_values = g_new0 (ConfigValues, 1);
-    config_values->allow_list = NULL;
-    config_values->deny_list = NULL;
-
-    GKeyFile *conf_file = g_key_file_new ();
-
-    const gchar *config_dir_env = g_getenv ("XDG_CONFIG_HOME");
-    gchar *config_dir = NULL;
-    if (config_dir_env == NULL || *config_dir_env == '\0') {
-        config_dir = g_build_filename (g_get_home_dir (), ".config", NULL);
-        config_dir_env = config_dir;
+    const gchar *xdg = g_getenv ("XDG_CONFIG_HOME");
+    if (xdg && *xdg) {
+        return g_build_filename (xdg, CONFIG_FILE_NAME, NULL);
     }
-    gchar *config_file_path = g_strconcat (config_dir_env, "/", CONFIG_FILE_NAME, NULL);
-    if (!g_key_file_load_from_file (conf_file, config_file_path, G_KEY_FILE_NONE, &err)) {
-        g_printerr ("%s\nUsing default values.\n", err->message);
-        set_default_values (DEFAULT_CHECK_INTERVAL, DEFAULT_NOTIFICATION_TIMEOUT, DEFAULT_MIC_NAME, config_values);
-        g_clear_error (&err);
-        g_free (config_file_path);
-        g_free (config_dir);
-        g_key_file_free (conf_file);
-        return config_values;
-    }
-    g_free (config_file_path);
-    g_free (config_dir);
-
-    if (!g_key_file_has_group (conf_file, "server")) {
-        g_printerr ("Couldn't find the group [server] inside the config file. Using default values.\n");
-        set_default_values (DEFAULT_CHECK_INTERVAL, DEFAULT_NOTIFICATION_TIMEOUT, DEFAULT_MIC_NAME, config_values);
-    }
-    else {
-        config_values->check_interval = g_key_file_get_uint64 (conf_file, "server", "check_interval", &err);
-        if (err != NULL) {
-            g_printerr ("%s\nUsing default value.\n", err->message);
-            g_clear_error (&err);
-            set_default_values (DEFAULT_CHECK_INTERVAL, 0, NULL, config_values);
-        }
-
-        config_values->notification_timeout = g_key_file_get_integer (conf_file, "server", "notification_timeout", &err);
-        if (err != NULL) {
-            g_printerr ("%s\nUsing default value.\n", err->message);
-            g_clear_error (&err);
-            set_default_values (0, DEFAULT_NOTIFICATION_TIMEOUT, NULL, config_values);
-        }
-
-        config_values->microphone_device = g_key_file_get_string (conf_file, "server", "microphone_device", &err);
-        if (err != NULL) {
-            g_printerr ("%s\nUsing default value.\n", err->message);
-            g_clear_error (&err);
-            set_default_values (0, 0, DEFAULT_MIC_NAME, config_values);
-        } else if (config_values->microphone_device != NULL && *config_values->microphone_device == '\0') {
-            g_free (config_values->microphone_device);
-            config_values->microphone_device = NULL;
-        }
-
-        // policy lists
-        config_values->allow_list = g_key_file_get_string_list (conf_file, "policy", "allow_list", NULL, &err);
-        if (err != NULL) {
-            g_clear_error (&err);
-        }
-        config_values->deny_list = g_key_file_get_string_list (conf_file, "policy", "deny_list", NULL, &err);
-        if (err != NULL) {
-            g_clear_error (&err);
-        }
-    }
-
-    g_key_file_free (conf_file);
-
-    if (config_values->check_interval <= 5) {
-        g_printerr ("You have chosen a too short interval (less than 5 seconds). Falling back to the default value.\n");
-        set_default_values (DEFAULT_CHECK_INTERVAL, 0, NULL, config_values);
-    }
-    if (config_values->notification_timeout < 0) {
-        g_printerr("notification_timeout value can't be a negative number. Falling back to the default value.\n");
-        set_default_values (0, DEFAULT_NOTIFICATION_TIMEOUT, NULL, config_values);
-    }
-
-    return config_values;
+    return g_build_filename (g_get_home_dir (), ".config", CONFIG_FILE_NAME, NULL);
 }
 
-
 static void
-set_default_values (gulong ci, gint nt, const gchar *mn, ConfigValues *cv)
+fill_defaults (ConfigValues *cv)
 {
-    if (ci > 5)
-        cv->check_interval = ci;
+    cv->check_interval        = DEFAULT_CHECK_INTERVAL;
+    cv->notification_timeout  = DEFAULT_NOTIFICATION_TIMEOUT;
+    cv->log_max_bytes         = DEFAULT_LOG_MAX_BYTES;
+    cv->microphone_device     = NULL;
+    cv->allow_list            = NULL;
+    cv->deny_list             = NULL;
+    cv->mic_allow_list        = NULL;
+    cv->mic_deny_list         = NULL;
+}
 
-    if (nt > 0)
-        cv->notification_timeout = nt;
+static gchar *
+get_string_or_null (GKeyFile *kf, const gchar *group, const gchar *key)
+{
+    GError *err = NULL;
+    gchar *v = g_key_file_get_string (kf, group, key, &err);
+    if (err) { g_clear_error (&err); return NULL; }
+    if (v && !*v) { g_free (v); return NULL; }
+    return v;
+}
 
-    if (mn != NULL && *mn != '\0')
-        cv->microphone_device = g_strdup (mn);
+static gchar **
+get_strv_or_null (GKeyFile *kf, const gchar *group, const gchar *key)
+{
+    GError *err = NULL;
+    gchar **v = g_key_file_get_string_list (kf, group, key, NULL, &err);
+    if (err) { g_clear_error (&err); return NULL; }
+    return v;
+}
+
+void
+config_values_free (ConfigValues *cv)
+{
+    if (!cv) return;
+    g_free (cv->microphone_device);
+    g_strfreev (cv->allow_list);
+    g_strfreev (cv->deny_list);
+    g_strfreev (cv->mic_allow_list);
+    g_strfreev (cv->mic_deny_list);
+    g_free (cv);
+}
+
+ConfigValues *
+load_config_file (const gchar *override_path)
+{
+    ConfigValues *cv = g_new0 (ConfigValues, 1);
+    fill_defaults (cv);
+
+    gchar *path = override_path ? g_strdup (override_path) : default_config_path ();
+    GKeyFile *kf = g_key_file_new ();
+    GError *err = NULL;
+
+    if (!g_key_file_load_from_file (kf, path, G_KEY_FILE_NONE, &err)) {
+        g_message ("No config file at %s; using defaults (%s)",
+                   path, err ? err->message : "unknown");
+        if (err) g_clear_error (&err);
+        g_key_file_free (kf);
+        g_free (path);
+        return cv;
+    }
+
+    if (g_key_file_has_group (kf, "server")) {
+        guint64 ci = g_key_file_get_uint64 (kf, "server", "check_interval", &err);
+        if (err) { g_clear_error (&err); }
+        else      { cv->check_interval = ci; }
+
+        gint nt = g_key_file_get_integer (kf, "server", "notification_timeout", &err);
+        if (err) { g_clear_error (&err); }
+        else      { cv->notification_timeout = nt; }
+
+        guint64 lmb = g_key_file_get_uint64 (kf, "server", "log_max_bytes", &err);
+        if (err) { g_clear_error (&err); }
+        else if (lmb > 0) { cv->log_max_bytes = (gsize) lmb; }
+
+        cv->microphone_device = get_string_or_null (kf, "server", "microphone_device");
+    }
+
+    if (g_key_file_has_group (kf, "policy")) {
+        cv->allow_list     = get_strv_or_null (kf, "policy", "allow_list");
+        cv->deny_list      = get_strv_or_null (kf, "policy", "deny_list");
+        cv->mic_allow_list = get_strv_or_null (kf, "policy", "mic_allow_list");
+        cv->mic_deny_list  = get_strv_or_null (kf, "policy", "mic_deny_list");
+    }
+
+    g_key_file_free (kf);
+    g_free (path);
+
+    /* Validate / clamp. */
+    if (cv->check_interval < MIN_CHECK_INTERVAL) {
+        g_warning ("check_interval=%" G_GUINT64_FORMAT " too small; using default %d",
+                   cv->check_interval, DEFAULT_CHECK_INTERVAL);
+        cv->check_interval = DEFAULT_CHECK_INTERVAL;
+    }
+    if (cv->notification_timeout < 0) {
+        g_warning ("notification_timeout < 0; using default %d", DEFAULT_NOTIFICATION_TIMEOUT);
+        cv->notification_timeout = DEFAULT_NOTIFICATION_TIMEOUT;
+    }
+    return cv;
 }

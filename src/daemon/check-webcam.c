@@ -1,281 +1,181 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <errno.h>
+#include <limits.h>
 #include <unistd.h>
-#include <memory.h>
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <linux/videodev2.h>
-#include <gio/gio.h>
-#include "sg-notification.h"
 #include "main.h"
-#include "sg-state.h"
 
+static gint xioctl (gint fh, gulong request, void *arg);
+static gint open_device (const gchar *dev_name);
+static gint init_device (gint fd, const gchar *dev_name);
+static gint probe_in_use (gint fd, const gchar *dev_name);
+static gchar *find_proc_using_webcam (const gchar *webcam_dev);
+static gchar *extract_proc_name_from_stat (const gchar *stat_contents);
 
-gint open_device (const gchar *dev_name);
-
-gint xioctl (gint fh, gulong request, void *arg);
-
-gint init_device (gint fd, const gchar *dev_name);
-
-gint get_webcam_status (gint fd, const gchar *dev_name);
-
-gboolean get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_get_proc);
-
-gchar *get_proc_using_webcam (const gchar *webcam_dev);
-
-static gchar *extract_proc_name (const gchar *stat_contents);
-
-
-static gboolean strv_contains(gchar **list, const gchar *name)
-{
-    if (!list || !name) return FALSE;
-    for (gchar **p = list; *p; ++p) {
-        if (g_strcmp0(*p, name) == 0) return TRUE;
-    }
-    return FALSE;
-}
-
-void
-check_webcam (gint nss, const gchar *dev_name, gchar **allow_list, gchar **deny_list)
-{
-    gchar *message;
-    gint fd = open_device (dev_name);
-    if (fd >= 0) {
-        gint status = init_device (fd, dev_name);
-        if (status == WEBCAM_ALREADY_IN_USE) {
-            gchar *proc_name = get_proc_using_webcam (dev_name);
-            sg_state_set_webcam(TRUE, proc_name);
-            gboolean allowed = strv_contains(allow_list, proc_name);
-            gboolean denied = strv_contains(deny_list, proc_name);
-            if (proc_name != NULL) {
-                message = g_strconcat (proc_name, " is currently using your webcam", NULL);
-            } else {
-                message = g_strdup ("A process is currently using your webcam");
-            }
-            // deny list always notifies; allow list suppresses notifications
-            gboolean should_notify = denied || !allowed;
-            if (should_notify) {
-                if (nss != INIT_ERROR) {
-                    sg_send_notification ("YOU ARE BEING SNOOPED", message, 5000);
-                } else {
-                    g_print ("YOU ARE BEING SNOOPED: %s\n", message);
-                }
-            }
-            g_free (proc_name);
-            g_free (message);
-        } else {
-            sg_state_set_webcam(FALSE, NULL);
-        }
-        close (fd);
-    }
-}
-
-
-gint
-open_device (const gchar *dev_name)
-{
-    int fd = open (dev_name, O_RDWR | O_NONBLOCK, 0);
-    if (fd == -1) {
-        g_printerr ("Cannot open '%s': %d, %s\n", dev_name, errno, g_strerror (errno));
-        return GENERIC_ERROR;
-    }
-
-    struct stat st;
-    if (stat (dev_name, &st) == -1) {
-        g_printerr ("Cannot identify '%s': %d, %s\n", dev_name, errno, g_strerror (errno));
-        close (fd);
-        return GENERIC_ERROR;
-    }
-    if (!S_ISCHR (st.st_mode)) {
-        g_printerr ("%s is no device\n", dev_name);
-        close (fd);
-        return GENERIC_ERROR;
-    }
-
-    return fd;
-}
-
-
-gint
-init_device (gint fd, const gchar *dev_name)
-{
-    struct v4l2_capability cap;
-
-    if (xioctl (fd, VIDIOC_QUERYCAP, &cap) == -1) {
-        if (errno == EINVAL) {
-            g_printerr ("%s is no V4L2 device\n", dev_name);
-            return GENERIC_ERROR;
-        } else {
-            g_printerr ("VIDIOC_QUERYCAP: %s\n", g_strerror (errno));
-        }
-    }
-
-    if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
-        g_printerr ("%s is no video capture device\n", dev_name);
-        return GENERIC_ERROR;
-    }
-
-    return get_webcam_status (fd, dev_name);
-}
-
-
-gint
+static gint
 xioctl (gint fh, gulong request, void *arg)
 {
     gint r;
-
     do {
         r = ioctl (fh, request, arg);
     } while (r == -1 && errno == EINTR);
-
     return r;
 }
 
-
-gint
-get_webcam_status (gint fd, const gchar *dev_name)
+static gint
+open_device (const gchar *dev_name)
 {
-    struct v4l2_requestbuffers req;
-
-    memset (&req, 0, sizeof (req));
-
-    req.count = 4;
-    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    req.memory = V4L2_MEMORY_MMAP;
-
-    if (xioctl (fd, VIDIOC_REQBUFS, &req) == -1) {
-        if (errno == EINVAL) {
-            g_printerr ("%s does not support memory mapping\n", dev_name);
-            return GENERIC_ERROR;
-        } else {
-            g_print ("Webcam IS being used\n");
-            return WEBCAM_ALREADY_IN_USE;
-        }
-    } else {
-        g_print ("Webcam is NOT being used\n");
-        return WEBCAM_NOT_IN_USE;
-    }
-}
-
-
-gboolean
-ignored_app_using_webcam (const gchar *dev_name, gchar **ignored_apps)
-{
-    if (ignored_apps == NULL) {
-        return FALSE;
-    }
-
-    for (guint i = 0, n = (guint)g_strv_length(ignored_apps); i < n; i++) {
-        guint pid = get_ppid_from_pname (ignored_apps[i]);
-        if (pid != 0) {
-            if (get_webcam_from_open_fd (dev_name, pid, FALSE) == WEBCAM_FOUND) {
-                return TRUE;
-            }
-        }
-    }
-
-    return FALSE;
-}
-
-
-gint
-get_webcam_from_open_fd (const gchar *dev_name, guint pid, gboolean called_from_get_proc)
-{
-    gchar *pid_str = g_strdup_printf ("%u", pid);
-    gchar *path = g_strconcat ("/proc/", pid_str, "/fd", NULL);
-
-    GError *err = NULL;
-    GDir *dir = g_dir_open (path, 0, &err);
-    if (err != NULL) {
-        if (!called_from_get_proc) {
-            g_printerr ("%s\n", err->message);
-        }
-        g_clear_error(&err);
-        g_free(pid_str);
-        g_free(path);
+    if (!dev_name) return GENERIC_ERROR;
+    int fd = open (dev_name, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd == -1) {
+        /* EBUSY or EACCES are common; don't spam the journal at info-level. */
         return GENERIC_ERROR;
     }
-
-    const gchar *subdir = g_dir_read_name (dir);
-    while (subdir != NULL) {
-        gchar *complete_path = g_strconcat (path, "/", subdir, NULL);
-        GFile *file = g_file_new_for_path (complete_path);
-        GFileInfo *file_info = g_file_query_info (file, "standard::*", G_FILE_QUERY_INFO_NONE, NULL, &err);
-        if (err != NULL) {
-            g_printerr("%s\n", err->message);
-            g_clear_error(&err);
-        } else {
-            const gchar *target = g_file_info_get_symlink_target (file_info);
-            if (g_strcmp0 (dev_name, target) == 0) {
-                g_free (complete_path);
-                g_dir_close (dir);
-                g_free (pid_str);
-                g_free (path);
-                g_object_unref (file_info);
-                g_object_unref (file);
-                return WEBCAM_FOUND;
-            }
-            g_object_unref (file_info);
-        }
-        g_free (complete_path);
-        g_object_unref (file);
-        subdir = g_dir_read_name (dir);
+    struct stat st;
+    if (fstat (fd, &st) == -1 || !S_ISCHR (st.st_mode)) {
+        (void) close (fd);
+        return GENERIC_ERROR;
     }
-
-    g_dir_close (dir);
-    g_free (pid_str);
-    g_free (path);
-
-    return WEBCAM_NOT_FOUND;
+    return fd;
 }
 
-
-gchar *
-get_proc_using_webcam (const gchar *webcam_dev)
+static gint
+init_device (gint fd, const gchar *dev_name)
 {
-    gchar *file, *contents;
-    gsize length;
-    GError *err = NULL;
-    gchar *proc = NULL;
+    struct v4l2_capability cap;
+    memset (&cap, 0, sizeof (cap));
+    if (xioctl (fd, VIDIOC_QUERYCAP, &cap) == -1) {
+        if (errno != EINVAL) {
+            g_message ("VIDIOC_QUERYCAP on %s failed: %s", dev_name, g_strerror (errno));
+        }
+        return GENERIC_ERROR;
+    }
+    guint32 caps = (cap.capabilities & V4L2_CAP_DEVICE_CAPS) ? cap.device_caps : cap.capabilities;
+    if (!(caps & V4L2_CAP_VIDEO_CAPTURE) && !(caps & V4L2_CAP_VIDEO_CAPTURE_MPLANE)) {
+        return GENERIC_ERROR;
+    }
+    return probe_in_use (fd, dev_name);
+}
 
-    for (guint i = 1000; i < 40000; i++) {
-        if (get_webcam_from_open_fd (webcam_dev, i, TRUE) == WEBCAM_FOUND) {
-            gchar *i_str = g_strdup_printf ("%d", i);
-            file = g_strconcat ("/proc/", i_str, "/stat", NULL);
-            if (!g_file_get_contents (file, &contents, &length, &err)) {
-                if (err) g_clear_error(&err);
-                g_free (i_str);
-                g_free (file);
-                continue;
+/* Probe whether the device has an active streaming user. Avoids any allocation
+ * that could trigger device LEDs by using an empty REQBUFS as a no-op probe;
+ * if a streamer is active, REQBUFS fails with EBUSY. */
+static gint
+probe_in_use (gint fd, const gchar *dev_name)
+{
+    struct v4l2_requestbuffers req;
+    memset (&req, 0, sizeof (req));
+    req.count  = 0; /* empty: pure probe, releases any allocations */
+    req.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    req.memory = V4L2_MEMORY_MMAP;
+    if (xioctl (fd, VIDIOC_REQBUFS, &req) == -1) {
+        if (errno == EBUSY) return WEBCAM_ALREADY_IN_USE;
+        if (errno == EINVAL) {
+            /* Try MPLANE as a fallback. */
+            memset (&req, 0, sizeof (req));
+            req.count  = 0;
+            req.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+            req.memory = V4L2_MEMORY_MMAP;
+            if (xioctl (fd, VIDIOC_REQBUFS, &req) == -1) {
+                if (errno == EBUSY) return WEBCAM_ALREADY_IN_USE;
+                /* Driver does not support memory mapping for this buf type. */
+                g_message ("%s does not support memory mapping", dev_name);
+            } else {
+                return WEBCAM_NOT_IN_USE;
             }
-            proc = extract_proc_name (contents);
-            g_free (i_str);
-            g_free (contents);
-            g_free (file);
+            return GENERIC_ERROR;
+        }
+        return GENERIC_ERROR;
+    }
+    return WEBCAM_NOT_IN_USE;
+}
+
+/* Iterate all numeric entries under /proc and find the first PID whose fd
+ * directory contains a symlink to webcam_dev. Returns the comm of that
+ * process (caller frees) or NULL. */
+static gchar *
+find_proc_using_webcam (const gchar *webcam_dev)
+{
+    GDir *proc = g_dir_open ("/proc", 0, NULL);
+    if (!proc) return NULL;
+    gchar *result = NULL;
+    const gchar *entry;
+    while ((entry = g_dir_read_name (proc)) != NULL) {
+        if (entry[0] < '0' || entry[0] > '9') continue;
+        gboolean numeric = TRUE;
+        for (const gchar *p = entry; *p; p++) {
+            if (*p < '0' || *p > '9') { numeric = FALSE; break; }
+        }
+        if (!numeric) continue;
+
+        gchar *fd_dir = g_strconcat ("/proc/", entry, "/fd", NULL);
+        GDir *fdd = g_dir_open (fd_dir, 0, NULL);
+        if (!fdd) {
+            /* most likely EACCES for other users' processes */
+            g_free (fd_dir);
+            continue;
+        }
+        gboolean match = FALSE;
+        const gchar *f;
+        while ((f = g_dir_read_name (fdd)) != NULL) {
+            gchar *full = g_strconcat (fd_dir, "/", f, NULL);
+            char target[PATH_MAX];
+            ssize_t n = readlink (full, target, sizeof (target) - 1);
+            g_free (full);
+            if (n <= 0) continue;
+            target[n] = '\0';
+            if (strcmp (target, webcam_dev) == 0) {
+                match = TRUE;
+                break;
+            }
+        }
+        g_dir_close (fdd);
+        g_free (fd_dir);
+
+        if (match) {
+            gchar *stat_path = g_strconcat ("/proc/", entry, "/stat", NULL);
+            gchar *contents = NULL;
+            if (g_file_get_contents (stat_path, &contents, NULL, NULL)) {
+                result = extract_proc_name_from_stat (contents);
+                g_free (contents);
+            }
+            g_free (stat_path);
             break;
         }
     }
-    return proc;
+    g_dir_close (proc);
+    return result;
 }
 
 static gchar *
-extract_proc_name (const gchar *stat_contents)
+extract_proc_name_from_stat (const gchar *stat_contents)
 {
-    if (stat_contents == NULL) {
-        return NULL;
-    }
-
+    if (!stat_contents) return NULL;
     const gchar *start = strchr (stat_contents, '(');
-    const gchar *end = strrchr (stat_contents, ')');
-    if (start == NULL || end == NULL || end <= start + 1) {
-        return NULL;
-    }
+    const gchar *end   = strrchr (stat_contents, ')');
+    if (!start || !end || end <= start + 1) return NULL;
+    gsize len = (gsize) (end - start - 1);
+    if (len > 64) len = 64; /* sanity cap */
+    return g_strndup (start + 1, len);
+}
 
-    gsize len = (gsize)(end - start - 1);
-    gchar *name = g_malloc0 (len + 1);
-    memcpy (name, start + 1, len);
-    name[len] = '\0';
-    return name;
+/* Returns TRUE if the webcam at dev_name is in use. If so and proc_name_out is
+ * non-NULL, it is filled with a newly-allocated comm string (or NULL on
+ * attribution failure; caller frees). */
+gboolean
+check_webcam (const gchar *dev_name, gchar **proc_name_out)
+{
+    if (proc_name_out) *proc_name_out = NULL;
+    gint fd = open_device (dev_name);
+    if (fd < 0) return FALSE;
+    gint status = init_device (fd, dev_name);
+    (void) close (fd);
+    if (status != WEBCAM_ALREADY_IN_USE) return FALSE;
+    if (proc_name_out) *proc_name_out = find_proc_using_webcam (dev_name);
+    return TRUE;
 }

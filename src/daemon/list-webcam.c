@@ -1,34 +1,45 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <glib.h>
+#include <glib/gstdio.h>
+#include <sys/stat.h>
 #include "main.h"
 
-
-struct _devs *list_webcam ()
+/* Enumerate /dev/video* nodes that exist and are character devices. We do not
+ * open them here (open() may fail with EBUSY on busy drivers, which would
+ * incorrectly drop the device the user actually wants flagged). */
+struct _devs *
+list_webcam (void)
 {
-    struct _devs *head, *curr;
-    const gchar *common = "/dev/video";
-
-    gint fd;
-    head = NULL;
-
-    // Getting the first 32 webcam should be more than enough :) If not, please adjust the number to suits your needs.
-    for (int i = 0; i < 32; i++) {
-        gchar *tmp_name = g_strdup_printf("%s%d", common, i);
-        if ((fd = open (tmp_name, O_RDONLY)) == -1) {
-            g_free (tmp_name);
-        } else {
-            close (fd);
-            curr = g_new0 (struct _devs, 1);
-            curr->dev_name = tmp_name; // already duplicated
-            curr->next = head;
-            head = curr;
-        }
+    struct _devs *head = NULL;
+    GError *err = NULL;
+    GDir *dir = g_dir_open ("/dev", 0, &err);
+    if (!dir) {
+        if (err) g_clear_error (&err);
+        return NULL;
     }
+    const gchar *name;
+    while ((name = g_dir_read_name (dir)) != NULL) {
+        if (!g_str_has_prefix (name, "video")) continue;
+        /* Only accept "video" followed by digits. */
+        const gchar *p = name + 5;
+        if (!*p) continue;
+        gboolean numeric = TRUE;
+        while (*p) {
+            if (*p < '0' || *p > '9') { numeric = FALSE; break; }
+            p++;
+        }
+        if (!numeric) continue;
 
+        gchar *path = g_strconcat ("/dev/", name, NULL);
+        GStatBuf st;
+        if (g_stat (path, &st) != 0 || !S_ISCHR (st.st_mode)) {
+            g_free (path);
+            continue;
+        }
+        struct _devs *node = g_new0 (struct _devs, 1);
+        node->dev_name = path; /* takes ownership */
+        node->next = head;
+        head = node;
+    }
+    g_dir_close (dir);
     return head;
 }
-

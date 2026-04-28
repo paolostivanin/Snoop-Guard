@@ -1,82 +1,148 @@
 #include <glib.h>
-#include <gio/gio.h>
+#include <glib-unix.h>
 #include <pipewire/pipewire.h>
 #include <spa/utils/dict.h>
 #include <string.h>
 #include "main.h"
-#include "sg-state.h"
 
 typedef struct {
-    struct pw_node *node;
+    uint32_t id;
+    struct pw_node *proxy;
     struct spa_hook listener;
-} PwNodeProxy;
+    /* Cached attributes from info events. */
+    gchar *media_class;
+    gchar *node_name;
+    gchar *app_name;
+    gchar *app_binary;
+    gboolean active; /* RUNNING capture node matching filter */
+    /* Backref so node listener can see the global monitor state. */
+    struct MicMonitor *monitor;
+} PwNode;
 
-typedef struct {
-    const gchar *filter;
-    gboolean active;
-    gchar *proc_name;
-    struct pw_main_loop *loop;
-    struct pw_context *context;
-    struct pw_core *core;
-    struct pw_registry *registry;
-    struct spa_hook registry_listener;
-    struct spa_hook core_listener;
-    GPtrArray *nodes;
-    int sync_seq;
-} PwQuery;
+typedef struct MicMonitor {
+    /* PipeWire */
+    struct pw_main_loop *pw_loop_handle;
+    struct pw_loop      *pw_loop;
+    struct pw_context   *context;
+    struct pw_core      *core;
+    struct pw_registry  *registry;
+    struct spa_hook      registry_listener;
+    GHashTable          *nodes; /* uint32_t id -> PwNode* */
+    guint                pw_source_id;
+    /* Config */
+    gchar               *filter; /* may be NULL/empty */
+    /* Callback into main */
+    SGMicChangedFn       cb;
+    gpointer             cb_data;
+    /* Snapshot of last reported state, to suppress duplicate callbacks. */
+    gboolean             last_active;
+    gchar               *last_proc;
+} MicMonitor;
 
-static gboolean contains_case_insensitive(const gchar *text, const gchar *needle)
+static MicMonitor *g_monitor = NULL;
+
+/* ---------- helpers ---------- */
+
+static gboolean
+contains_ci (const gchar *hay, const gchar *needle)
 {
-    if (!text || !needle || !*needle) return FALSE;
-    gchar *text_l = g_ascii_strdown(text, -1);
-    gchar *needle_l = g_ascii_strdown(needle, -1);
-    gboolean match = g_strrstr(text_l, needle_l) != NULL;
-    g_free(text_l);
-    g_free(needle_l);
-    return match;
+    if (!hay || !needle || !*needle) return FALSE;
+    gchar *h = g_utf8_casefold (hay, -1);
+    gchar *n = g_utf8_casefold (needle, -1);
+    gboolean found = (strstr (h, n) != NULL);
+    g_free (h);
+    g_free (n);
+    return found;
 }
 
-static gboolean is_capture_node(const gchar *media_class, enum pw_node_state state)
+static gboolean
+is_capture_class (const gchar *media_class)
 {
     if (!media_class) return FALSE;
-    if (state != PW_NODE_STATE_RUNNING) return FALSE;
-    return g_strrstr(media_class, "Audio/Source") != NULL ||
-           g_strrstr(media_class, "Stream/Input/Audio") != NULL;
+    return strstr (media_class, "Audio/Source") != NULL ||
+           strstr (media_class, "Stream/Input/Audio") != NULL;
 }
 
-static gboolean node_matches_filter(const gchar *node_name, const gchar *app_name, const gchar *filter)
+static gboolean
+node_matches_filter (const PwNode *n, const gchar *filter)
 {
     if (!filter || !*filter) return TRUE;
-    if (contains_case_insensitive(node_name, filter)) return TRUE;
-    if (contains_case_insensitive(app_name, filter)) return TRUE;
-    return FALSE;
+    return contains_ci (n->node_name, filter) ||
+           contains_ci (n->app_name, filter) ||
+           contains_ci (n->app_binary, filter);
 }
 
-static gchar *pick_proc_name(const gchar *app_binary, const gchar *app_name, const gchar *node_name)
+static void
+pwnode_free (gpointer p)
 {
-    if (app_binary && *app_binary) return g_strdup(app_binary);
-    if (app_name && *app_name) return g_strdup(app_name);
-    if (node_name && *node_name) return g_strdup(node_name);
-    return NULL;
+    PwNode *n = p;
+    if (!n) return;
+    spa_hook_remove (&n->listener);
+    if (n->proxy) pw_proxy_destroy ((struct pw_proxy *) n->proxy);
+    g_free (n->media_class);
+    g_free (n->node_name);
+    g_free (n->app_name);
+    g_free (n->app_binary);
+    g_free (n);
 }
 
-static void on_node_info(void *data, const struct pw_node_info *info)
+/* Recompute the aggregate (any active capture matching filter?) and notify
+ * main if it changed. */
+static void
+recompute_and_dispatch (MicMonitor *m)
 {
-    PwQuery *query = data;
-    if (!info || query->active || !info->props) return;
+    gboolean any_active = FALSE;
+    const gchar *proc_name = NULL;
+    GHashTableIter it;
+    gpointer key, value;
+    g_hash_table_iter_init (&it, m->nodes);
+    while (g_hash_table_iter_next (&it, &key, &value)) {
+        PwNode *n = value;
+        if (n->active) {
+            any_active = TRUE;
+            /* Pick the first; could pick the most recently changed. */
+            if (!proc_name) proc_name = n->app_binary ? n->app_binary :
+                                        n->app_name   ? n->app_name   :
+                                        n->node_name;
+            break;
+        }
+    }
+    gboolean changed = (m->last_active != any_active) ||
+                       (g_strcmp0 (m->last_proc, proc_name) != 0);
+    if (!changed) return;
+    m->last_active = any_active;
+    g_free (m->last_proc);
+    m->last_proc = proc_name ? g_strdup (proc_name) : NULL;
+    if (m->cb) m->cb (any_active, proc_name, m->cb_data);
+}
 
-    const gchar *media_class = spa_dict_lookup(info->props, PW_KEY_MEDIA_CLASS);
-    if (!is_capture_node(media_class, info->state)) return;
+static void
+update_from_props (PwNode *n, const struct spa_dict *props)
+{
+    if (!props) return;
+    const gchar *mc = spa_dict_lookup (props, PW_KEY_MEDIA_CLASS);
+    const gchar *nn = spa_dict_lookup (props, PW_KEY_NODE_NAME);
+    const gchar *an = spa_dict_lookup (props, PW_KEY_APP_NAME);
+    const gchar *ab = spa_dict_lookup (props, PW_KEY_APP_PROCESS_BINARY);
+    if (mc) { g_free (n->media_class); n->media_class = g_strdup (mc); }
+    if (nn) { g_free (n->node_name);   n->node_name   = g_strdup (nn); }
+    if (an) { g_free (n->app_name);    n->app_name    = g_strdup (an); }
+    if (ab) { g_free (n->app_binary);  n->app_binary  = g_strdup (ab); }
+}
 
-    const gchar *node_name = spa_dict_lookup(info->props, PW_KEY_NODE_NAME);
-    const gchar *app_name = spa_dict_lookup(info->props, PW_KEY_APP_NAME);
-    const gchar *app_binary = spa_dict_lookup(info->props, PW_KEY_APP_PROCESS_BINARY);
+/* ---------- node events ---------- */
 
-    if (!node_matches_filter(node_name, app_name, query->filter)) return;
-
-    query->active = TRUE;
-    query->proc_name = pick_proc_name(app_binary, app_name, node_name);
-    pw_main_loop_quit(query->loop);
+static void
+on_node_info (void *data, const struct pw_node_info *info)
+{
+    PwNode *n = data;
+    if (!info) return;
+    update_from_props (n, info->props);
+    gboolean is_capture = is_capture_class (n->media_class);
+    gboolean running    = (info->state == PW_NODE_STATE_RUNNING);
+    gboolean matches    = node_matches_filter (n, n->monitor->filter);
+    n->active = is_capture && running && matches;
+    recompute_and_dispatch (n->monitor);
 }
 
 static const struct pw_node_events node_events = {
@@ -84,129 +150,134 @@ static const struct pw_node_events node_events = {
     .info = on_node_info,
 };
 
-static void on_registry_global(void *data, uint32_t id, uint32_t permissions,
-                               const char *type, uint32_t version,
-                               const struct spa_dict *props)
+/* ---------- registry events ---------- */
+
+static void
+on_registry_global (void *data, uint32_t id, uint32_t permissions,
+                    const char *type, uint32_t version,
+                    const struct spa_dict *props)
 {
-    PwQuery *query = data;
-    (void)permissions;
-    (void)props;
+    (void) permissions;
+    (void) props;
+    MicMonitor *m = data;
+    if (!type || strcmp (type, PW_TYPE_INTERFACE_Node) != 0) return;
 
-    if (!type || strcmp(type, PW_TYPE_INTERFACE_Node) != 0) return;
-
-    PwNodeProxy *node = g_new0(PwNodeProxy, 1);
-    node->node = pw_registry_bind(query->registry, id, type, version, 0);
-    if (!node->node) {
-        g_free(node);
+    PwNode *n = g_new0 (PwNode, 1);
+    n->id      = id;
+    n->monitor = m;
+    n->proxy   = pw_registry_bind (m->registry, id, type, version, 0);
+    if (!n->proxy) {
+        g_free (n);
         return;
     }
-    pw_node_add_listener(node->node, &node->listener, &node_events, query);
-    g_ptr_array_add(query->nodes, node);
+    pw_node_add_listener (n->proxy, &n->listener, &node_events, n);
+    g_hash_table_insert (m->nodes, GUINT_TO_POINTER (id), n);
+}
+
+static void
+on_registry_global_remove (void *data, uint32_t id)
+{
+    MicMonitor *m = data;
+    g_hash_table_remove (m->nodes, GUINT_TO_POINTER (id));
+    recompute_and_dispatch (m);
 }
 
 static const struct pw_registry_events registry_events = {
     PW_VERSION_REGISTRY_EVENTS,
-    .global = on_registry_global,
+    .global        = on_registry_global,
+    .global_remove = on_registry_global_remove,
 };
 
-static void on_core_done(void *data, uint32_t id, int seq)
+/* ---------- GLib integration ---------- */
+
+static gboolean
+on_pw_fd_ready (gint fd, GIOCondition cond, gpointer data)
 {
-    PwQuery *query = data;
-    if (id == PW_ID_CORE && seq == query->sync_seq) {
-        pw_main_loop_quit(query->loop);
+    (void) fd;
+    (void) cond;
+    MicMonitor *m = data;
+    int r = pw_loop_iterate (m->pw_loop, 0);
+    if (r < 0) {
+        g_warning ("pw_loop_iterate: %s", g_strerror (-r));
     }
+    return G_SOURCE_CONTINUE;
 }
 
-static const struct pw_core_events core_events = {
-    PW_VERSION_CORE_EVENTS,
-    .done = on_core_done,
-};
+/* ---------- public API ---------- */
 
-static gboolean any_pipewire_capture_active(const gchar *filter, gchar **proc_name_out)
+gboolean
+mic_monitor_init (const gchar *filter, SGMicChangedFn cb, gpointer user_data)
 {
-    PwQuery query = {
-        .filter = filter,
-        .active = FALSE,
-        .proc_name = NULL,
-        .loop = NULL,
-        .context = NULL,
-        .core = NULL,
-        .registry = NULL,
-        .nodes = NULL,
-        .sync_seq = -1,
-    };
+    if (g_monitor) return TRUE;
 
-    pw_init(NULL, NULL);
-    query.loop = pw_main_loop_new(NULL);
-    if (!query.loop) {
-        g_printerr("Failed to create PipeWire main loop\n");
-        pw_deinit();
-        return FALSE;
-    }
-    query.context = pw_context_new(pw_main_loop_get_loop(query.loop), NULL, 0);
-    if (!query.context) {
-        g_printerr("Failed to create PipeWire context\n");
-        pw_main_loop_destroy(query.loop);
-        pw_deinit();
-        return FALSE;
-    }
-    query.core = pw_context_connect(query.context, NULL, 0);
-    if (!query.core) {
-        g_printerr("Failed to connect to PipeWire core\n");
-        pw_context_destroy(query.context);
-        pw_main_loop_destroy(query.loop);
-        pw_deinit();
-        return FALSE;
+    pw_init (NULL, NULL);
+
+    MicMonitor *m = g_new0 (MicMonitor, 1);
+    m->cb       = cb;
+    m->cb_data  = user_data;
+    m->filter   = (filter && *filter) ? g_strdup (filter) : NULL;
+    m->nodes    = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+                                         NULL, pwnode_free);
+    m->last_active = FALSE;
+    m->last_proc   = NULL;
+
+    m->pw_loop_handle = pw_main_loop_new (NULL);
+    if (!m->pw_loop_handle) goto fail;
+    m->pw_loop = pw_main_loop_get_loop (m->pw_loop_handle);
+
+    m->context = pw_context_new (m->pw_loop, NULL, 0);
+    if (!m->context) goto fail;
+
+    m->core = pw_context_connect (m->context, NULL, 0);
+    if (!m->core) {
+        g_warning ("PipeWire connect failed; mic monitoring disabled");
+        goto fail;
     }
 
-    query.registry = pw_core_get_registry(query.core, PW_VERSION_REGISTRY, 0);
-    if (!query.registry) {
-        g_printerr("Failed to get PipeWire registry\n");
-        pw_core_disconnect(query.core);
-        pw_context_destroy(query.context);
-        pw_main_loop_destroy(query.loop);
-        pw_deinit();
-        return FALSE;
-    }
+    m->registry = pw_core_get_registry (m->core, PW_VERSION_REGISTRY, 0);
+    if (!m->registry) goto fail;
+    pw_registry_add_listener (m->registry, &m->registry_listener,
+                              &registry_events, m);
 
-    query.nodes = g_ptr_array_new();
-    pw_registry_add_listener(query.registry, &query.registry_listener, &registry_events, &query);
-    pw_core_add_listener(query.core, &query.core_listener, &core_events, &query);
-    query.sync_seq = pw_core_sync(query.core, PW_ID_CORE, 0);
+    int fd = pw_loop_get_fd (m->pw_loop);
+    if (fd < 0) goto fail;
+    m->pw_source_id = g_unix_fd_add (fd, G_IO_IN, on_pw_fd_ready, m);
 
-    pw_main_loop_run(query.loop);
+    /* Claim the loop for this thread (the main thread). */
+    pw_loop_enter (m->pw_loop);
 
-    if (proc_name_out) {
-        *proc_name_out = query.proc_name ? g_strdup(query.proc_name) : NULL;
-    }
+    g_monitor = m;
+    return TRUE;
 
-    for (guint i = 0; i < query.nodes->len; i++) {
-        PwNodeProxy *node = g_ptr_array_index(query.nodes, i);
-        if (node->node) pw_proxy_destroy((struct pw_proxy *)node->node);
-        g_free(node);
-    }
-    g_ptr_array_free(query.nodes, TRUE);
-
-    if (query.registry) pw_proxy_destroy((struct pw_proxy *)query.registry);
-    if (query.core) pw_core_disconnect(query.core);
-    if (query.context) pw_context_destroy(query.context);
-    if (query.loop) pw_main_loop_destroy(query.loop);
-    g_clear_pointer(&query.proc_name, g_free);
-    pw_deinit();
-
-    return query.active;
+fail:
+    if (m->registry) pw_proxy_destroy ((struct pw_proxy *) m->registry);
+    if (m->core)     pw_core_disconnect (m->core);
+    if (m->context)  pw_context_destroy (m->context);
+    if (m->pw_loop_handle) pw_main_loop_destroy (m->pw_loop_handle);
+    g_hash_table_destroy (m->nodes);
+    g_free (m->filter);
+    g_free (m);
+    pw_deinit ();
+    return FALSE;
 }
 
-int get_mic_status (const gchar *mic)
+void
+mic_monitor_uninit (void)
 {
-    gchar *proc = NULL;
-    gboolean active = any_pipewire_capture_active(mic, &proc);
-    sg_state_set_mic(active, proc);
-    if (proc) g_free(proc);
-    if (active) {
-        g_print("Mic IS being used\n");
-        return MIC_ALREADY_IN_USE;
-    }
-    g_print("Mic is NOT being used\n");
-    return MIC_NOT_IN_USE;
+    MicMonitor *m = g_monitor;
+    if (!m) return;
+    g_monitor = NULL;
+    if (m->pw_source_id) g_source_remove (m->pw_source_id);
+    /* Destroy nodes first so their listeners detach before the proxies become
+     * invalid via core disconnect. */
+    g_hash_table_destroy (m->nodes);
+    if (m->registry) pw_proxy_destroy ((struct pw_proxy *) m->registry);
+    if (m->core)     pw_core_disconnect (m->core);
+    if (m->context)  pw_context_destroy (m->context);
+    if (m->pw_loop)  pw_loop_leave (m->pw_loop);
+    if (m->pw_loop_handle) pw_main_loop_destroy (m->pw_loop_handle);
+    g_free (m->filter);
+    g_free (m->last_proc);
+    g_free (m);
+    pw_deinit ();
 }
