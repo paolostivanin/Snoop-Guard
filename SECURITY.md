@@ -2,10 +2,10 @@
 
 ## Supported Versions
 
-This is a community project. We aim to keep the `main` branch secure and supported.
+This is a community project. We aim to keep the `master` branch secure and supported.
 Bug fixes and security fixes are provided on a best-effort basis for the latest released version.
 
-- Supported: latest release (and `main`)
+- Supported: latest release (and `master`)
 - Not supported: older tags/releases
 
 ## Reporting a Vulnerability
@@ -42,4 +42,5 @@ Note: Further sandboxing (e.g., system call filters) may be introduced, but must
 ## Build/Release Integrity
 
 - Builds use modern compiler hardening flags (RELRO, FORTIFY in optimized builds) via CMake configuration.
-- Please verify release artifacts against checksums/signatures if provided.
+- Verify release artifacts against published checksums. A release is signed only
+  when its release notes explicitly provide a signature and verification key.

@@ -1,5 +1,15 @@
 # Clion stuffs
 cmake-build-debug
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+_CPack_Packages/
+Testing/
+snoop-guard-*.tar.gz
 .idea
 
 # Object files

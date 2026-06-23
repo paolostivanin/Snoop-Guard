@@ -1,16 +1,15 @@
 [Unit]
-Description=Snoop Guard daemon (monitors webcam and microphone usage)
+Description=Snoop Guard webcam and microphone monitor
 Documentation=https://github.com/paolostivanin/Snoop-Guard
 Wants=graphical-session.target
 After=graphical-session.target
 
 [Service]
-Type=simple
-ExecStart=/usr/bin/sg-daemon
-# Run in the user session; no PID file needed
+Type=dbus
+BusName=org.snoopguard.Service
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/sg-daemon
 Restart=on-failure
 RestartSec=2s
-# Security hardening (keep compatible with desktop usage)
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -25,14 +24,11 @@ LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX
 RestrictNamespaces=yes
 SystemCallArchitectures=native
-# Do not isolate devices: needs access to /dev/video* and /dev/snd/*
 PrivateDevices=no
-# No network access required by the daemon
 IPAddressDeny=any
 CapabilityBoundingSet=
 AmbientCapabilities=
 UMask=0077
-# Journal is enough
 StandardOutput=journal
 StandardError=journal
 

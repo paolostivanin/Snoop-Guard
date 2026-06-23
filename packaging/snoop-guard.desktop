@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Snoop Guard
+Comment=Monitor webcam and microphone activity
+Exec=sg-ctl status
+Icon=security-high
+Terminal=true
+NoDisplay=true
+Categories=System;Security;

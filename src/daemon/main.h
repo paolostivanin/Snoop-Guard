@@ -1,22 +1,23 @@
 #pragma once
 #include <glib.h>
 
-#define DEFAULT_CHECK_INTERVAL       30
+#define DEFAULT_CHECK_INTERVAL       2
 #define DEFAULT_NOTIFICATION_TIMEOUT 5
-#define DEFAULT_LOG_MAX_BYTES        (256 * 1024)
-#define MIN_CHECK_INTERVAL           5
-
-#define GENERIC_ERROR -1
+#define DEFAULT_LOG_MAX_BYTES        ((gsize) 256 * 1024)
+#define MIN_CHECK_INTERVAL           1
+#define MAX_CHECK_INTERVAL           3600
+#define MAX_NOTIFICATION_TIMEOUT     86400
+#define MAX_LOG_BYTES                (1024UL * 1024UL * 1024UL)
 
 #define WEBCAM_NOT_IN_USE     10
 #define WEBCAM_ALREADY_IN_USE 11
 
-struct _devs {
+struct SGDevice {
     gchar *dev_name;
-    struct _devs *next;
+    struct SGDevice *next;
 };
 
-typedef struct _conf_values_t {
+typedef struct ConfigValues {
     guint64  check_interval;
     gint     notification_timeout;     /* seconds; 0 = manual dismissal */
     gsize    log_max_bytes;
@@ -28,15 +29,33 @@ typedef struct _conf_values_t {
 } ConfigValues;
 
 void          config_values_free (ConfigValues *cv);
-ConfigValues *load_config_file   (const gchar *override_path);
+ConfigValues *load_config_file   (const gchar *override_path,
+                                  gboolean explicit_path,
+                                  GError **error);
 
-struct _devs *list_webcam (void);
+struct SGDevice *list_webcam (void);
+void             free_webcam_list (struct SGDevice *head);
 
-/* Return TRUE if dev_name is in use; if so, *proc_name_out (caller frees) is
- * the comm of the user (or NULL on attribution failure). */
-gboolean check_webcam (const gchar *dev_name, gchar **proc_name_out);
+typedef enum {
+    SG_MONITOR_OK,
+    SG_MONITOR_DEGRADED,
+    SG_MONITOR_UNAVAILABLE,
+} SGMonitorHealth;
+
+const gchar *sg_monitor_health_to_string (SGMonitorHealth health);
+
+typedef struct {
+    gboolean active;
+    gchar **processes;
+    gchar **unknown_devices;
+    SGMonitorHealth health;
+    gchar *diagnostic;
+} SGMonitorSnapshot;
+
+void     sg_monitor_snapshot_clear (SGMonitorSnapshot *snapshot);
+gboolean check_webcams (SGMonitorSnapshot *snapshot);
 
 /* Mic monitor (event-driven, persistent PipeWire connection). */
-typedef void (*SGMicChangedFn) (gboolean active, const gchar *proc, gpointer user_data);
+typedef void (*SGMicChangedFn) (const SGMonitorSnapshot *snapshot, gpointer user_data);
 gboolean mic_monitor_init (const gchar *filter, SGMicChangedFn cb, gpointer user_data);
 void     mic_monitor_uninit (void);

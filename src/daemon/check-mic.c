@@ -25,6 +25,7 @@ typedef struct MicMonitor {
     struct pw_loop      *pw_loop;
     struct pw_context   *context;
     struct pw_core      *core;
+    struct spa_hook      core_listener;
     struct pw_registry  *registry;
     struct spa_hook      registry_listener;
     GHashTable          *nodes; /* uint32_t id -> PwNode* */
@@ -36,12 +37,29 @@ typedef struct MicMonitor {
     gpointer             cb_data;
     /* Snapshot of last reported state, to suppress duplicate callbacks. */
     gboolean             last_active;
-    gchar               *last_proc;
+    gchar              **last_processes;
+    SGMonitorHealth      health;
+    gchar               *diagnostic;
 } MicMonitor;
 
 static MicMonitor *g_monitor = NULL;
 
 /* ---------- helpers ---------- */
+
+static gint
+compare_strings (gconstpointer a, gconstpointer b)
+{
+    return g_strcmp0 (*(gchar * const *) a, *(gchar * const *) b);
+}
+
+static gboolean
+strv_equal_nullable (gchar **a, gchar **b)
+{
+    if (a == b) return TRUE;
+    if (!a || !b) return FALSE;
+    return g_strv_equal ((const gchar * const *) a,
+                         (const gchar * const *) b);
+}
 
 static gboolean
 contains_ci (const gchar *hay, const gchar *needle)
@@ -55,11 +73,31 @@ contains_ci (const gchar *hay, const gchar *needle)
     return found;
 }
 
+static gchar *
+safe_metadata (const gchar *value)
+{
+    if (!value) return NULL;
+    gchar *safe = g_utf8_make_valid (value, -1);
+    for (gchar *p = safe; *p; p++) {
+        if ((guchar) *p < 0x20 || (guchar) *p == 0x7f) *p = ' ';
+    }
+    g_strstrip (safe);
+    if (!*safe) g_clear_pointer (&safe, g_free);
+    return safe;
+}
+
 static gboolean
 is_capture_class (const gchar *media_class)
 {
     if (!media_class) return FALSE;
     return strstr (media_class, "Audio/Source") != NULL ||
+           strstr (media_class, "Stream/Input/Audio") != NULL;
+}
+
+static gboolean
+is_capture_stream (const gchar *media_class)
+{
+    return media_class &&
            strstr (media_class, "Stream/Input/Audio") != NULL;
 }
 
@@ -92,7 +130,8 @@ static void
 recompute_and_dispatch (MicMonitor *m)
 {
     gboolean any_active = FALSE;
-    const gchar *proc_name = NULL;
+    GHashTable *processes = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                   g_free, NULL);
     GHashTableIter it;
     gpointer key, value;
     g_hash_table_iter_init (&it, m->nodes);
@@ -100,20 +139,45 @@ recompute_and_dispatch (MicMonitor *m)
         PwNode *n = value;
         if (n->active) {
             any_active = TRUE;
-            /* Pick the first; could pick the most recently changed. */
-            if (!proc_name) proc_name = n->app_binary ? n->app_binary :
-                                        n->app_name   ? n->app_name   :
-                                        n->node_name;
-            break;
+            if (is_capture_stream (n->media_class)) {
+                const gchar *proc_name = n->app_binary ? n->app_binary :
+                                         n->app_name   ? n->app_name   :
+                                         n->node_name;
+                if (proc_name && *proc_name) {
+                    g_hash_table_add (processes, g_strdup (proc_name));
+                }
+            }
         }
     }
+    GPtrArray *array = g_ptr_array_new_with_free_func (g_free);
+    g_hash_table_iter_init (&it, processes);
+    while (g_hash_table_iter_next (&it, &key, NULL)) {
+        g_ptr_array_add (array, g_strdup (key));
+    }
+    g_ptr_array_sort (array, compare_strings);
+    g_ptr_array_add (array, NULL);
+    gchar **process_strv = (gchar **) g_ptr_array_free (array, FALSE);
     gboolean changed = (m->last_active != any_active) ||
-                       (g_strcmp0 (m->last_proc, proc_name) != 0);
-    if (!changed) return;
+                       !strv_equal_nullable (m->last_processes, process_strv);
+    if (!changed) {
+        g_strfreev (process_strv);
+        g_hash_table_destroy (processes);
+        return;
+    }
     m->last_active = any_active;
-    g_free (m->last_proc);
-    m->last_proc = proc_name ? g_strdup (proc_name) : NULL;
-    if (m->cb) m->cb (any_active, proc_name, m->cb_data);
+    g_clear_pointer (&m->last_processes, g_strfreev);
+    m->last_processes = g_strdupv (process_strv);
+    if (m->cb) {
+        SGMonitorSnapshot snapshot = {
+            .active = any_active,
+            .processes = process_strv,
+            .health = m->health,
+            .diagnostic = m->diagnostic,
+        };
+        m->cb (&snapshot, m->cb_data);
+    }
+    g_strfreev (process_strv);
+    g_hash_table_destroy (processes);
 }
 
 static void
@@ -124,10 +188,10 @@ update_from_props (PwNode *n, const struct spa_dict *props)
     const gchar *nn = spa_dict_lookup (props, PW_KEY_NODE_NAME);
     const gchar *an = spa_dict_lookup (props, PW_KEY_APP_NAME);
     const gchar *ab = spa_dict_lookup (props, PW_KEY_APP_PROCESS_BINARY);
-    if (mc) { g_free (n->media_class); n->media_class = g_strdup (mc); }
-    if (nn) { g_free (n->node_name);   n->node_name   = g_strdup (nn); }
-    if (an) { g_free (n->app_name);    n->app_name    = g_strdup (an); }
-    if (ab) { g_free (n->app_binary);  n->app_binary  = g_strdup (ab); }
+    if (mc) { g_free (n->media_class); n->media_class = safe_metadata (mc); }
+    if (nn) { g_free (n->node_name);   n->node_name   = safe_metadata (nn); }
+    if (an) { g_free (n->app_name);    n->app_name    = safe_metadata (an); }
+    if (ab) { g_free (n->app_binary);  n->app_binary  = safe_metadata (ab); }
 }
 
 /* ---------- node events ---------- */
@@ -188,14 +252,46 @@ static const struct pw_registry_events registry_events = {
     .global_remove = on_registry_global_remove,
 };
 
+static void
+on_core_error (void *data,
+               uint32_t id G_GNUC_UNUSED,
+               int seq G_GNUC_UNUSED,
+               int res,
+               const char *message)
+{
+    MicMonitor *m = data;
+    if (res >= 0) return;
+    m->health = SG_MONITOR_UNAVAILABLE;
+    g_free (m->diagnostic);
+    m->diagnostic = g_strdup_printf ("PipeWire connection failed: %s",
+                                     message ? message : g_strerror (-res));
+    if (m->cb) {
+        SGMonitorSnapshot snapshot = {
+            .active = FALSE,
+            .health = m->health,
+            .diagnostic = m->diagnostic,
+        };
+        m->cb (&snapshot, m->cb_data);
+    }
+}
+
+static const struct pw_core_events core_events = {
+    PW_VERSION_CORE_EVENTS,
+    .error = on_core_error,
+};
+
 /* ---------- GLib integration ---------- */
 
 static gboolean
 on_pw_fd_ready (gint fd, GIOCondition cond, gpointer data)
 {
     (void) fd;
-    (void) cond;
     MicMonitor *m = data;
+    if (cond & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) {
+        m->pw_source_id = 0;
+        on_core_error (m, 0, 0, EPIPE, "PipeWire event loop disconnected");
+        return G_SOURCE_REMOVE;
+    }
     int r = pw_loop_iterate (m->pw_loop, 0);
     if (r < 0) {
         g_warning ("pw_loop_iterate: %s", g_strerror (-r));
@@ -219,7 +315,7 @@ mic_monitor_init (const gchar *filter, SGMicChangedFn cb, gpointer user_data)
     m->nodes    = g_hash_table_new_full (g_direct_hash, g_direct_equal,
                                          NULL, pwnode_free);
     m->last_active = FALSE;
-    m->last_proc   = NULL;
+    m->health = SG_MONITOR_OK;
 
     m->pw_loop_handle = pw_main_loop_new (NULL);
     if (!m->pw_loop_handle) goto fail;
@@ -233,6 +329,7 @@ mic_monitor_init (const gchar *filter, SGMicChangedFn cb, gpointer user_data)
         g_warning ("PipeWire connect failed; mic monitoring disabled");
         goto fail;
     }
+    pw_core_add_listener (m->core, &m->core_listener, &core_events, m);
 
     m->registry = pw_core_get_registry (m->core, PW_VERSION_REGISTRY, 0);
     if (!m->registry) goto fail;
@@ -241,17 +338,28 @@ mic_monitor_init (const gchar *filter, SGMicChangedFn cb, gpointer user_data)
 
     int fd = pw_loop_get_fd (m->pw_loop);
     if (fd < 0) goto fail;
-    m->pw_source_id = g_unix_fd_add (fd, G_IO_IN, on_pw_fd_ready, m);
+    m->pw_source_id = g_unix_fd_add (fd, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+                                     on_pw_fd_ready, m);
 
     /* Claim the loop for this thread (the main thread). */
     pw_loop_enter (m->pw_loop);
 
     g_monitor = m;
+    if (m->cb) {
+        SGMonitorSnapshot snapshot = {
+            .active = FALSE,
+            .health = SG_MONITOR_OK,
+        };
+        m->cb (&snapshot, m->cb_data);
+    }
     return TRUE;
 
 fail:
     if (m->registry) pw_proxy_destroy ((struct pw_proxy *) m->registry);
-    if (m->core)     pw_core_disconnect (m->core);
+    if (m->core) {
+        spa_hook_remove (&m->core_listener);
+        pw_core_disconnect (m->core);
+    }
     if (m->context)  pw_context_destroy (m->context);
     if (m->pw_loop_handle) pw_main_loop_destroy (m->pw_loop_handle);
     g_hash_table_destroy (m->nodes);
@@ -272,12 +380,14 @@ mic_monitor_uninit (void)
      * invalid via core disconnect. */
     g_hash_table_destroy (m->nodes);
     if (m->registry) pw_proxy_destroy ((struct pw_proxy *) m->registry);
+    spa_hook_remove (&m->core_listener);
     if (m->core)     pw_core_disconnect (m->core);
     if (m->context)  pw_context_destroy (m->context);
     if (m->pw_loop)  pw_loop_leave (m->pw_loop);
     if (m->pw_loop_handle) pw_main_loop_destroy (m->pw_loop_handle);
     g_free (m->filter);
-    g_free (m->last_proc);
+    g_strfreev (m->last_processes);
+    g_free (m->diagnostic);
     g_free (m);
     pw_deinit ();
 }

@@ -19,9 +19,16 @@ typedef struct {
     gboolean mic_active;
     gchar *webcam_proc;
     gchar *mic_proc;
+    gchar **webcam_processes;
+    gchar **mic_processes;
+    gchar **webcam_unknown_devices;
+    gchar *webcam_health;
+    gchar *mic_health;
+    gchar *webcam_diagnostic;
+    gchar *mic_diagnostic;
 } SGStatus;
 
-typedef void (*SGReloadFn) (gpointer user_data);
+typedef gboolean (*SGReloadFn) (gpointer user_data, GError **error);
 
 void sg_dbus_init (SGReloadFn reload_cb, gpointer reload_data);
 void sg_dbus_uninit (void);
@@ -31,3 +38,7 @@ void sg_dbus_update_status (const SGStatus *status);
 
 /* Borrowed bus connection (NULL if not yet acquired). */
 GDBusConnection *sg_dbus_get_bus (void);
+
+/* TRUE after a bus connection/name ownership failure that should make the
+ * daemon exit unsuccessfully so its service manager can restart it. */
+gboolean sg_dbus_had_fatal_error (void);

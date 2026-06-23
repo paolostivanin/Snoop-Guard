@@ -28,7 +28,10 @@ on_notify_done (GObject *source, GAsyncResult *res, gpointer user_data)
     GError *err = NULL;
     GVariant *ret = g_dbus_connection_call_finish (G_DBUS_CONNECTION (source), res, &err);
     if (ret) g_variant_unref (ret);
-    if (err) g_clear_error (&err);
+    if (err) {
+        g_warning ("Notification delivery failed: %s", err->message);
+        g_clear_error (&err);
+    }
 }
 
 void

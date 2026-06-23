@@ -1,9 +1,10 @@
 #pragma once
 #include <glib.h>
 
-#define SG_LOG_DEFAULT_MAX_BYTES (256 * 1024)
+#define SG_LOG_DEFAULT_MAX_BYTES ((gsize) 256 * 1024)
 
-void sg_log_init (const gchar *file_path, gsize max_bytes);
+gboolean sg_log_init (const gchar *file_path, gsize max_bytes, GError **error);
+void sg_log_set_max_bytes (gsize max_bytes);
 
 void sg_log_uninit (void);
 

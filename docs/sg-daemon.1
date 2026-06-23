@@ -1,0 +1,17 @@
+.TH SG-DAEMON 1 "June 2026" "Snoop Guard 1.1.0-dev"
+.SH NAME
+sg-daemon \- monitor webcam and microphone activity
+.SH SYNOPSIS
+.B sg-daemon
+[\fB--config\fR \fIPATH\fR] [\fB--version\fR]
+.SH DESCRIPTION
+Runs in the user session, publishes org.snoopguard.Service on D-Bus, and sends
+notifications when camera or microphone capture is detected.
+.SH FILES
+.I ~/.config/snoop-guard.ini
+and
+.I ~/.local/state/snoop-guard/events.log
+.SH SIGNALS
+SIGHUP reloads configuration. SIGINT and SIGTERM stop the daemon.
+.SH SEE ALSO
+.BR sg-ctl (1)

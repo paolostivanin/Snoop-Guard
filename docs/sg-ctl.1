@@ -1,0 +1,11 @@
+.TH SG-CTL 1 "June 2026" "Snoop Guard 1.1.0-dev"
+.SH NAME
+sg-ctl \- inspect and control Snoop Guard
+.SH SYNOPSIS
+.B sg-ctl
+[\fB--json\fR] [status|health|recent [N]|watch|reload]
+.SH EXIT STATUS
+Zero indicates success. health returns 2 for degraded monitoring and 3 when a
+monitor is unavailable. Other failures return nonzero.
+.SH SEE ALSO
+.BR sg-daemon (1)

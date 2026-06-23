@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.snoopguard.Service
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/sg-daemon
+SystemdService=snoop-guard.service

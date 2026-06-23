@@ -2,9 +2,11 @@
 
 #include <gio/gio.h>
 
-#define INIT_ERROR -1
-#define INIT_OK 0
-#define ALREADY_INITTED 1
+typedef enum {
+    INIT_ERROR = -1,
+    INIT_OK = 0,
+    ALREADY_INITTED = 1,
+} SGNotifyInitResult;
 
 typedef enum {
     SG_NOTIFY_NORMAL = 0,

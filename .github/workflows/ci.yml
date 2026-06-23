@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        cc: [gcc, clang]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y cmake ninja-build libglib2.0-dev libpipewire-0.3-dev
+      - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_C_FLAGS=-Werror
+      - run: cmake --build build
+      - run: ctest --test-dir build --output-on-failure
+      - run: DESTDIR="$PWD/stage" cmake --install build --prefix /usr
+      - run: sed "s|^ExecStart=.*|ExecStart=$PWD/build/sg-daemon|" build/snoop-guard.service > build/snoop-guard.verify.service
+      - run: systemd-analyze verify build/snoop-guard.verify.service
+      - run: cmake --build build --target package package_source
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y cmake ninja-build libglib2.0-dev libpipewire-0.3-dev
+      - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - run: cmake --build build
+      - run: ctest --test-dir build --output-on-failure

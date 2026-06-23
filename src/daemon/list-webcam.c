@@ -6,10 +6,10 @@
 /* Enumerate /dev/video* nodes that exist and are character devices. We do not
  * open them here (open() may fail with EBUSY on busy drivers, which would
  * incorrectly drop the device the user actually wants flagged). */
-struct _devs *
+struct SGDevice *
 list_webcam (void)
 {
-    struct _devs *head = NULL;
+    struct SGDevice *head = NULL;
     GError *err = NULL;
     GDir *dir = g_dir_open ("/dev", 0, &err);
     if (!dir) {
@@ -35,11 +35,22 @@ list_webcam (void)
             g_free (path);
             continue;
         }
-        struct _devs *node = g_new0 (struct _devs, 1);
+        struct SGDevice *node = g_new0 (struct SGDevice, 1);
         node->dev_name = path; /* takes ownership */
         node->next = head;
         head = node;
     }
     g_dir_close (dir);
     return head;
+}
+
+void
+free_webcam_list (struct SGDevice *head)
+{
+    while (head) {
+        struct SGDevice *next = head->next;
+        g_free (head->dev_name);
+        g_free (head);
+        head = next;
+    }
 }
